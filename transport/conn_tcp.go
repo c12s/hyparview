@@ -6,7 +6,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/tamararankovic/hyparview/data"
+	"github.com/c12s/hyparview/data"
 )
 
 type TCPConn struct {

@@ -1,8 +1,8 @@
 package hyparview
 
 import (
-	"github.com/tamararankovic/hyparview/transport"
-	"github.com/tamararankovic/hyparview/data"
+	"github.com/c12s/hyparview/data"
+	"github.com/c12s/hyparview/transport"
 )
 
 type Peer struct {

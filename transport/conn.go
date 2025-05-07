@@ -1,6 +1,6 @@
 package transport
 
-import "github.com/tamararankovic/hyparview/data"
+import "github.com/c12s/hyparview/data"
 
 type Conn interface {
 	GetAddress() string

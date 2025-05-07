@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tamararankovic/hyparview/data"
+	"github.com/c12s/hyparview/data"
 )
 
 func serialize(msg data.Message) ([]byte, error) {

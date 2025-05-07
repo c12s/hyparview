@@ -5,7 +5,7 @@ import (
 	"log"
 	"slices"
 
-	"github.com/tamararankovic/hyparview/data"
+	"github.com/c12s/hyparview/data"
 )
 
 type ConnManager struct {

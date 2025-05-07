@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/tamararankovic/hyparview/data"
-	"github.com/tamararankovic/hyparview/hyparview"
-	"github.com/tamararankovic/hyparview/transport"
+	"github.com/c12s/hyparview/data"
+	"github.com/c12s/hyparview/hyparview"
+	"github.com/c12s/hyparview/transport"
 )
 
 func main() {
