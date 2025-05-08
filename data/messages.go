@@ -5,6 +5,7 @@ type MessageType int8
 const (
 	JOIN MessageType = iota
 	FORWARD_JOIN
+	FORWARD_JOIN_ACCEPT
 	DISCONNECT
 	NEIGHTBOR
 	NEIGHTBOR_REPLY
@@ -26,6 +27,11 @@ type ForwardJoin struct {
 	NodeID        string
 	ListenAddress string
 	TTL           int
+}
+
+type ForwardJoinAccept struct {
+	NodeID        string
+	ListenAddress string
 }
 
 type Disconnect struct {

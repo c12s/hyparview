@@ -3,7 +3,6 @@ package transport
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/c12s/hyparview/data"
 )
@@ -18,28 +17,27 @@ func serialize(msg data.Message) ([]byte, error) {
 	return append(typeBytes, payloadBytes...), nil
 }
 
-func deserialize(msgSerialized []byte) (data.Message, error) {
+func Deserialize(msgSerialized []byte, payload any) (data.Message, error) {
 	if len(msgSerialized) == 0 {
 		return data.Message{}, errors.New("message empty")
 	}
-	msgType := data.MessageType(msgSerialized[0])
-	payload := payloadByType[msgType]
-	if payload == nil {
-		return data.Message{}, fmt.Errorf("payload struct not found for msg type %v", msgType)
+	msgType := data.MessageType(int8(msgSerialized[0]))
+	var err error = nil
+	if payload != nil {
+		err = json.Unmarshal(msgSerialized[1:], payload)
 	}
-	err := json.Unmarshal(msgSerialized[1:], &payload)
 	return data.Message{
 		Type:    msgType,
 		Payload: payload,
 	}, err
 }
 
-var payloadByType map[data.MessageType]any = map[data.MessageType]any{
-	data.JOIN:            data.Join{},
-	data.FORWARD_JOIN:    data.ForwardJoin{},
-	data.DISCONNECT:      data.Disconnect{},
-	data.NEIGHTBOR:       data.Neighbor{},
-	data.NEIGHTBOR_REPLY: data.NeighborReply{},
-	data.SHUFFLE:         data.Shuffle{},
-	data.SHUFFLE_REPLY:   data.ShuffleReply{},
-}
+// var payloadByType map[data.MessageType]any = map[data.MessageType]any{
+// 	data.JOIN:            data.Join{},
+// 	data.FORWARD_JOIN:    data.ForwardJoin{},
+// 	data.DISCONNECT:      data.Disconnect{},
+// 	data.NEIGHTBOR:       data.Neighbor{},
+// 	data.NEIGHTBOR_REPLY: data.NeighborReply{},
+// 	data.SHUFFLE:         data.Shuffle{},
+// 	data.SHUFFLE_REPLY:   data.ShuffleReply{},
+// }

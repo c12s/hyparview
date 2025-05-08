@@ -13,6 +13,7 @@ type HyParViewConfig struct {
 type Config struct {
 	NodeID,
 	ListenAddress,
+	ContactNodeID string
 	ContactNodeAddress string
 	HyParViewConfig
 }
