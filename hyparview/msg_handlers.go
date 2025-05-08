@@ -33,7 +33,7 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 		},
 		conn: sender,
 	}
-	h.activeView.peers = append(h.activeView.peers, newPeer)
+	h.activeView.add(newPeer, true)
 	log.Printf("peer [ID=%s, address=%s] added to active view\n", newPeer.node.ID, newPeer.conn.GetAddress())
 	forwardJoinMsg := data.Message{
 		Type: data.FORWARD_JOIN,
@@ -44,7 +44,7 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 		},
 	}
 	for _, peer := range h.activeView.peers {
-		if peer.node.ID == newPeer.node.ID || peer.conn == nil {
+		if peer.node.ID == newPeer.node.ID {
 			continue
 		}
 		err := peer.conn.Send(forwardJoinMsg)
@@ -70,10 +70,6 @@ func (h *HyParView) onDisconnect(msgBytes []byte, sender transport.Conn) error {
 	if err != nil {
 		return fmt.Errorf("peer %s not in active view\n", msg.NodeID)
 	}
-	// if peer.node.ID != msg.NodeID {
-	// 	log.Printf("node trying to disconnect not matching the message info: %v - %s\n", msg, sender.GetAddress())
-	// 	return nil
-	// }
 	h.activeView.delete(peer)
 	return h.connManager.Disconnect(peer.conn)
 }
@@ -114,17 +110,17 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 			log.Println(err)
 		} else {
 			newPeer.conn = conn
-			if h.activeView.full() {
-				err = h.disconnectRandomPeer()
-				if err != nil {
-					log.Println(err)
-				}
-			}
-			h.activeView.peers = append(h.activeView.peers, newPeer)
+			// if h.activeView.full() {
+			// 	err = h.disconnectRandomPeer()
+			// 	if err != nil {
+			// 		log.Println(err)
+			// 	}
+			// }
+			h.activeView.add(newPeer, true)
 			addedToActiveView = true
 		}
 	} else if msg.TTL == h.config.PRWL {
-		h.passiveView.peers = append(h.passiveView.peers, newPeer)
+		h.passiveView.add(newPeer, false)
 	}
 	msg.TTL--
 	if !addedToActiveView {
@@ -133,7 +129,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 		if err == nil {
 			nodeIdBlacklist = append(nodeIdBlacklist, senderPeer.node.ID)
 		}
-		randomPeer, err := h.activeView.selectRandom(nodeIdBlacklist)
+		randomPeer, err := h.activeView.selectRandom(nodeIdBlacklist, true)
 		if err == nil && randomPeer.conn != nil {
 			return randomPeer.conn.Send(data.Message{
 				Type:    data.FORWARD_JOIN,
@@ -162,7 +158,7 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 		},
 		conn: sender,
 	}
-	h.activeView.peers = append(h.activeView.peers, newPeer)
+	h.activeView.add(newPeer, true)
 	if h.activeView.full() {
 		return h.disconnectRandomPeer()
 	}
@@ -195,7 +191,7 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 			},
 			conn: sender,
 		}
-		h.activeView.peers = append(h.activeView.peers, newPeer)
+		h.activeView.add(newPeer, true)
 		log.Printf("peer [ID=%s, address=%s] added to active view\n", newPeer.node.ID, newPeer.conn.GetAddress())
 	}
 	neighborReplyMsg := data.Message{
@@ -229,7 +225,7 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		}
 		h.passiveView.delete(peer)
 		peer.conn = sender
-		h.activeView.peers = append(h.activeView.peers, peer)
+		h.activeView.add(peer, true)
 		log.Printf("peer [ID=%s, address=%s] added to active view\n", peer.node.ID, peer.conn.GetAddress())
 	}
 	return nil
@@ -248,8 +244,8 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 	log.Printf("%s received onShuffle %v\n", h.self.ID, msg)
 	msg.TTL--
 	if msg.TTL > 0 && len(h.activeView.peers) > 1 {
-		peer, err := h.activeView.selectRandom([]string{msg.NodeID})
-		if err != nil || peer.conn == nil {
+		peer, err := h.activeView.selectRandom([]string{msg.NodeID}, true)
+		if err != nil {
 			return fmt.Errorf("cannot find a peer to forward the shuffle msg")
 		}
 		return peer.conn.Send(data.Message{
@@ -297,7 +293,7 @@ func (h *HyParView) onShuffleReply(msgBytes []byte, sender transport.Conn) error
 	if err != nil {
 		return err
 	}
-	log.Printf("%s received onShuffleReply %v\n", h.self.ID, msg)
+	log.Printf("%s received onShuffleReplyy %v\n", h.self.ID, msg)
 	h.integrateNodesIntoPartialView(msg.Nodes, msg.ReceivedNodes)
 	return nil
 }

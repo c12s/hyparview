@@ -31,13 +31,3 @@ func Deserialize(msgSerialized []byte, payload any) (data.Message, error) {
 		Payload: payload,
 	}, err
 }
-
-// var payloadByType map[data.MessageType]any = map[data.MessageType]any{
-// 	data.JOIN:            data.Join{},
-// 	data.FORWARD_JOIN:    data.ForwardJoin{},
-// 	data.DISCONNECT:      data.Disconnect{},
-// 	data.NEIGHTBOR:       data.Neighbor{},
-// 	data.NEIGHTBOR_REPLY: data.NeighborReply{},
-// 	data.SHUFFLE:         data.Shuffle{},
-// 	data.SHUFFLE_REPLY:   data.ShuffleReply{},
-// }

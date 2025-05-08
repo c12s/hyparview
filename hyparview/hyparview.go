@@ -20,6 +20,7 @@ type HyParView struct {
 	peerUp      chan Peer
 	peerDown    chan Peer
 	msgHandlers map[data.MessageType]func(msg []byte, sender transport.Conn) error
+	stopShuffle chan struct{}
 }
 
 func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.ConnManager) (*HyParView, error) {
@@ -39,6 +40,7 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 		peerUp:      make(chan Peer),
 		peerDown:    make(chan Peer),
 		connManager: connManager,
+		stopShuffle: make(chan struct{}),
 	}
 	hv.msgHandlers = map[data.MessageType]func(msgAny []byte, sender transport.Conn) error{
 		data.JOIN:                hv.onJoin,
@@ -83,13 +85,12 @@ func (h *HyParView) Join(contactNodeID, contactNodeAddress string) error {
 		},
 		conn: conn,
 	}
-	// log.Println(newPeer.conn)
-	h.activeView.peers = append(h.activeView.peers, newPeer)
+	h.activeView.add(newPeer, true)
 	return nil
 }
 
 func (h *HyParView) Leave() {
-
+	h.stopShuffle <- struct{}{}
 }
 
 func (h *HyParView) GetPeers() []Peer {
@@ -98,13 +99,6 @@ func (h *HyParView) GetPeers() []Peer {
 
 func (h *HyParView) OnPeerUp(handler func(peer Peer)) transport.Subscription {
 	return h.connManager.OnConnUp(func(conn transport.Conn) {
-		h.activeView.mu.Lock()
-		defer h.activeView.mu.Unlock()
-		h.passiveView.mu.Lock()
-		defer h.passiveView.mu.Unlock()
-		if peer, err := h.activeView.getByConn(conn); err == nil {
-			handler(peer)
-		}
 	})
 }
 
@@ -115,6 +109,7 @@ func (h *HyParView) OnPeerDown(handler func(peer Peer)) transport.Subscription {
 		h.passiveView.mu.Lock()
 		defer h.passiveView.mu.Unlock()
 		if peer, err := h.activeView.getByConn(conn); err == nil {
+			log.Printf("%s - peer %s down", h.self.ID, peer.node.ID)
 			h.activeView.delete(peer)
 			go h.replacePeer([]string{})
 			go handler(peer)
@@ -135,7 +130,7 @@ func (h *HyParView) onReeive(received transport.MsgReceived) {
 }
 
 func (h *HyParView) disconnectRandomPeer() error {
-	disconnectPeer, err := h.activeView.selectRandom([]string{})
+	disconnectPeer, err := h.activeView.selectRandom([]string{}, true)
 	if err != nil {
 		return nil
 	}
@@ -146,23 +141,16 @@ func (h *HyParView) disconnectRandomPeer() error {
 			NodeID: h.self.ID,
 		},
 	}
-	if disconnectPeer.conn == nil {
-		return nil
-	}
 	err = disconnectPeer.conn.Send(disconnectMsg)
 	if err != nil {
 		return err
 	}
-	// err = h.connManager.Disconnect(disconnectPeer.conn)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
 	return nil
 }
 
 func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 	for {
-		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist)
+		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist, false)
 		if err != nil {
 			log.Println("no peer candidates to replace the failed peer")
 			break
@@ -173,7 +161,6 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 			h.passiveView.delete(candidate)
 			continue
 		}
-		candidate.conn = conn
 		neighborMsg := data.Message{
 			Type: data.NEIGHTBOR,
 			Payload: data.Neighbor{
@@ -182,7 +169,7 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 				HighPriority:  len(h.activeView.peers) == 0,
 			},
 		}
-		err = candidate.conn.Send(neighborMsg)
+		err = conn.Send(neighborMsg)
 		if err != nil {
 			log.Println(err)
 			h.passiveView.delete(candidate)
@@ -216,54 +203,57 @@ func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandi
 					break
 				}
 			}
-			if len(h.passiveView.peers) == passiveViewLen {
-				peer, err := h.passiveView.selectRandom([]string{})
+			if len(h.passiveView.peers) >= passiveViewLen {
+				peer, err := h.passiveView.selectRandom([]string{}, false)
 				if err == nil {
 					h.passiveView.delete(peer)
 				}
 			}
 		}
-		h.passiveView.peers = append(h.passiveView.peers, Peer{node: node})
+		if !h.passiveView.full() {
+			h.passiveView.add(Peer{node: node}, false)
+		}
 	}
 }
 
 func (h *HyParView) shuffle() {
 	ticker := time.NewTicker(time.Duration(h.config.ShuffleInterval) * time.Second)
-	for range ticker.C {
-		h.activeView.mu.Lock()
-		h.passiveView.mu.Lock()
-		// log.Printf("%s shuffle triggered\n", h.self.ID)
-		activeViewMaxIndex := int(math.Min(float64(h.config.Ka), float64(len(h.activeView.peers))))
-		passiveViewMaxIndex := int(math.Min(float64(h.config.Kp), float64(len(h.passiveView.peers))))
-		peers := append(h.activeView.peers[:activeViewMaxIndex], h.passiveView.peers[:passiveViewMaxIndex]...)
-		nodes := make([]data.Node, len(peers))
-		for i, peer := range peers {
-			nodes[i] = peer.node
+	for {
+		select {
+		case <-ticker.C:
+			h.activeView.mu.Lock()
+			h.passiveView.mu.Lock()
+			log.Printf("%s shuffle triggered\n", h.self.ID)
+			activeViewMaxIndex := int(math.Min(float64(h.config.Ka), float64(len(h.activeView.peers))))
+			passiveViewMaxIndex := int(math.Min(float64(h.config.Kp), float64(len(h.passiveView.peers))))
+			peers := append(h.activeView.peers[:activeViewMaxIndex], h.passiveView.peers[:passiveViewMaxIndex]...)
+			nodes := make([]data.Node, len(peers))
+			for i, peer := range peers {
+				nodes[i] = peer.node
+			}
+			shuffleMsg := data.Message{
+				Type: data.SHUFFLE,
+				Payload: data.Shuffle{
+					NodeID:        h.self.ID,
+					ListenAddress: h.self.ListenAddress,
+					Nodes:         nodes,
+					TTL:           h.config.ARWL,
+				},
+			}
+			peer, err := h.activeView.selectRandom([]string{}, true)
+			if err != nil {
+				log.Println("no peers in active view to perform shuffle")
+				continue
+			}
+			err = peer.conn.Send(shuffleMsg)
+			if err != nil {
+				log.Println(err)
+			}
+			h.activeView.mu.Unlock()
+			h.passiveView.mu.Unlock()
+		case <-h.stopShuffle:
+			log.Println("stop shuffle")
+			return
 		}
-		shuffleMsg := data.Message{
-			Type: data.SHUFFLE,
-			Payload: data.Shuffle{
-				NodeID:        h.self.ID,
-				ListenAddress: h.self.ListenAddress,
-				Nodes:         nodes,
-				TTL:           h.config.ARWL,
-			},
-		}
-		// log.Println(h.activeView)
-		peer, err := h.activeView.selectRandom([]string{})
-		if err != nil {
-			log.Println("no peers in active view to perform shuffle")
-			continue
-		}
-		// log.Println(peer)
-		if peer.conn == nil {
-			continue
-		}
-		err = peer.conn.Send(shuffleMsg)
-		if err != nil {
-			log.Println(err)
-		}
-		h.activeView.mu.Unlock()
-		h.passiveView.mu.Unlock()
 	}
 }

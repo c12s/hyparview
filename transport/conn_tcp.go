@@ -14,6 +14,7 @@ type TCPConn struct {
 	conn         net.Conn
 	msgCh        chan []byte
 	disconnectCh chan struct{}
+	stopCh       chan struct{}
 }
 
 func NewTCPConn(address string) (Conn, error) {
@@ -30,6 +31,7 @@ func MakeTCPConn(conn net.Conn) (Conn, error) {
 		conn:         conn,
 		msgCh:        make(chan []byte),
 		disconnectCh: make(chan struct{}),
+		stopCh:       make(chan struct{}),
 	}
 	tcpConn.read()
 	return tcpConn, nil
@@ -55,12 +57,7 @@ func (t TCPConn) Send(msg data.Message) error {
 }
 
 func (t TCPConn) disconnect() error {
-	err := t.conn.Close()
-	if err != nil {
-		return err
-	}
-	t.disconnectCh <- struct{}{}
-	return nil
+	return t.conn.Close()
 }
 
 func (t TCPConn) onDisconnect(handler func()) {
@@ -90,32 +87,19 @@ func (t TCPConn) read() {
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
-				t.handleError(err)
+				t.disconnectCh <- struct{}{}
 				break
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
-				t.handleError(err)
+				t.disconnectCh <- struct{}{}
 				break
 			}
-			// msg, err := Deserialize(payload, nil)
-			// if err != nil {
-			// 	log.Println(err)
-			// 	continue
-			// }
 			t.msgCh <- payload
 		}
 	}()
-}
-
-func (t TCPConn) handleError(err error) {
-	if err == nil {
-		return
-	}
-	log.Println(err)
-	t.disconnectCh <- struct{}{}
 }
 
 func (t TCPConn) isClosed(err error) bool {
@@ -134,7 +118,7 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 		if err != nil {
 			return err
 		}
-		// log.Printf("Server listening on %s\n", address)
+		log.Printf("Server listening on %s\n", address)
 
 		go func() {
 			for {
@@ -143,7 +127,7 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 					log.Println("Connection error:", err)
 					continue
 				}
-				// log.Printf("new TCP connection %s\n", conn.RemoteAddr().String())
+				log.Printf("new TCP connection %s\n", conn.RemoteAddr().String())
 				tcpConn, err := MakeTCPConn(conn)
 				if err != nil {
 					log.Println(err)

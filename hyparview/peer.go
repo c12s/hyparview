@@ -37,7 +37,7 @@ func (p *PeerList) getById(id string) (Peer, error) {
 
 func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
-		return peer.conn != nil && peer.conn.GetAddress() == conn.GetAddress()
+		return peer.conn == conn
 	})
 	if index < 0 {
 		return Peer{}, errors.New("tmp")
@@ -45,10 +45,10 @@ func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 	return p.peers[index], nil
 }
 
-func (p *PeerList) selectRandom(nodeIdBlacklist []string) (Peer, error) {
+func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer, error) {
 	filteredPeers := make([]Peer, 0)
 	for _, peer := range p.peers {
-		if !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.node.ID }) {
+		if (!connected || peer.conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.node.ID }) {
 			filteredPeers = append(filteredPeers, peer)
 		}
 	}
@@ -67,4 +67,11 @@ func (p *PeerList) delete(peer Peer) {
 		return
 	}
 	p.peers = slices.Delete(p.peers, index, index+1)
+}
+
+func (p *PeerList) add(peer Peer, connected bool) {
+	if connected && peer.conn == nil {
+		return
+	}
+	p.peers = append(p.peers, peer)
 }
