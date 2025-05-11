@@ -93,8 +93,15 @@ func (h *HyParView) Leave() {
 	h.stopShuffle <- struct{}{}
 }
 
-func (h *HyParView) GetPeers() []Peer {
-	return h.activeView.peers
+func (h *HyParView) Self() data.Node {
+	return h.self
+}
+
+func (h *HyParView) GetPeers(num int) []Peer {
+	peers := make([]Peer, len(h.activeView.peers))
+	copy(peers, h.activeView.peers)
+	index := int(math.Min(float64(num), float64(len(peers))))
+	return peers[:index]
 }
 
 func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender transport.Conn) error) {
