@@ -11,8 +11,8 @@ import (
 )
 
 type Peer struct {
-	node data.Node
-	conn transport.Conn
+	Node data.Node
+	Conn transport.Conn
 }
 
 type PeerList struct {
@@ -27,7 +27,7 @@ func (p *PeerList) full() bool {
 
 func (p *PeerList) getById(id string) (Peer, error) {
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
-		return peer.node.ID == id
+		return peer.Node.ID == id
 	})
 	if index < 0 {
 		return Peer{}, errors.New("tmp")
@@ -37,7 +37,7 @@ func (p *PeerList) getById(id string) (Peer, error) {
 
 func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
-		return peer.conn == conn
+		return peer.Conn == conn
 	})
 	if index < 0 {
 		return Peer{}, errors.New("tmp")
@@ -48,7 +48,7 @@ func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer, error) {
 	filteredPeers := make([]Peer, 0)
 	for _, peer := range p.peers {
-		if (!connected || peer.conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.node.ID }) {
+		if (!connected || peer.Conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.Node.ID }) {
 			filteredPeers = append(filteredPeers, peer)
 		}
 	}
@@ -61,7 +61,7 @@ func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer,
 
 func (p *PeerList) delete(peer Peer) {
 	index := slices.IndexFunc(p.peers, func(p Peer) bool {
-		return p.node.ID == peer.node.ID
+		return p.Node.ID == peer.Node.ID
 	})
 	if index < 0 {
 		return
@@ -70,7 +70,7 @@ func (p *PeerList) delete(peer Peer) {
 }
 
 func (p *PeerList) add(peer Peer, connected bool) {
-	if connected && peer.conn == nil {
+	if connected && peer.Conn == nil {
 		return
 	}
 	p.peers = append(p.peers, peer)

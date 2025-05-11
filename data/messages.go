@@ -11,6 +11,7 @@ const (
 	NEIGHTBOR_REPLY
 	SHUFFLE
 	SHUFFLE_REPLY
+	CUSTOM
 )
 
 type Message struct {

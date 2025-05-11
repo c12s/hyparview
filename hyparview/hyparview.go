@@ -79,11 +79,11 @@ func (h *HyParView) Join(contactNodeID, contactNodeAddress string) error {
 		return err
 	}
 	newPeer := Peer{
-		node: data.Node{
+		Node: data.Node{
 			ID:            contactNodeID,
 			ListenAddress: contactNodeAddress,
 		},
-		conn: conn,
+		Conn: conn,
 	}
 	h.activeView.add(newPeer, true)
 	return nil
@@ -95,6 +95,10 @@ func (h *HyParView) Leave() {
 
 func (h *HyParView) GetPeers() []Peer {
 	return h.activeView.peers
+}
+
+func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender transport.Conn) error) {
+	h.msgHandlers[data.CUSTOM] = customMsgHandler
 }
 
 func (h *HyParView) OnPeerUp(handler func(peer Peer)) transport.Subscription {
@@ -109,7 +113,7 @@ func (h *HyParView) OnPeerDown(handler func(peer Peer)) transport.Subscription {
 		h.passiveView.mu.Lock()
 		defer h.passiveView.mu.Unlock()
 		if peer, err := h.activeView.getByConn(conn); err == nil {
-			log.Printf("%s - peer %s down", h.self.ID, peer.node.ID)
+			log.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 			h.activeView.delete(peer)
 			go h.replacePeer([]string{})
 			go handler(peer)
@@ -141,7 +145,7 @@ func (h *HyParView) disconnectRandomPeer() error {
 			NodeID: h.self.ID,
 		},
 	}
-	err = disconnectPeer.conn.Send(disconnectMsg)
+	err = disconnectPeer.Conn.Send(disconnectMsg)
 	if err != nil {
 		return err
 	}
@@ -155,7 +159,7 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 			log.Println("no peer candidates to replace the failed peer")
 			break
 		}
-		conn, err := h.connManager.Connect(candidate.node.ListenAddress)
+		conn, err := h.connManager.Connect(candidate.Node.ListenAddress)
 		if err != nil {
 			log.Println(err)
 			h.passiveView.delete(candidate)
@@ -182,7 +186,7 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandidates []data.Node) {
 	nodes = slices.DeleteFunc(nodes, func(node data.Node) bool {
 		return node.ID == h.self.ID || slices.ContainsFunc(append(h.activeView.peers, h.passiveView.peers...), func(peer Peer) bool {
-			return peer.node.ID == node.ID
+			return peer.Node.ID == node.ID
 		})
 	})
 	discardedCandidates := make([]data.Node, 0)
@@ -196,7 +200,7 @@ func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandi
 			passiveViewLen := len(h.passiveView.peers)
 			for _, deleteCandidate := range deleteCandidates {
 				h.passiveView.peers = slices.DeleteFunc(h.passiveView.peers, func(peer Peer) bool {
-					return peer.node.ID == deleteCandidate.ID
+					return peer.Node.ID == deleteCandidate.ID
 				})
 				discardedCandidates = append(discardedCandidates, deleteCandidate)
 				if len(h.passiveView.peers) < passiveViewLen {
@@ -211,7 +215,7 @@ func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandi
 			}
 		}
 		if !h.passiveView.full() {
-			h.passiveView.add(Peer{node: node}, false)
+			h.passiveView.add(Peer{Node: node}, false)
 		}
 	}
 }
@@ -229,7 +233,7 @@ func (h *HyParView) shuffle() {
 			peers := append(h.activeView.peers[:activeViewMaxIndex], h.passiveView.peers[:passiveViewMaxIndex]...)
 			nodes := make([]data.Node, len(peers))
 			for i, peer := range peers {
-				nodes[i] = peer.node
+				nodes[i] = peer.Node
 			}
 			shuffleMsg := data.Message{
 				Type: data.SHUFFLE,
@@ -245,7 +249,7 @@ func (h *HyParView) shuffle() {
 				log.Println("no peers in active view to perform shuffle")
 				continue
 			}
-			err = peer.conn.Send(shuffleMsg)
+			err = peer.Conn.Send(shuffleMsg)
 			if err != nil {
 				log.Println(err)
 			}
