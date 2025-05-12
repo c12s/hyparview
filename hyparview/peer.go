@@ -25,6 +25,10 @@ func (p *PeerList) full() bool {
 	return len(p.peers) >= p.capacity
 }
 
+func (p *PeerList) overflow() bool {
+	return len(p.peers) > p.capacity
+}
+
 func (p *PeerList) getById(id string) (Peer, error) {
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
 		return peer.Node.ID == id
@@ -71,6 +75,11 @@ func (p *PeerList) delete(peer Peer) {
 
 func (p *PeerList) add(peer Peer, connected bool) {
 	if connected && peer.Conn == nil {
+		return
+	}
+	if slices.ContainsFunc(p.peers, func(p Peer) bool {
+		return p.Node.ID == peer.Node.ID
+	}) {
 		return
 	}
 	p.peers = append(p.peers, peer)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/c12s/hyparview/data"
 	"github.com/c12s/hyparview/transport"
+	"github.com/natefinch/lumberjack"
 )
 
 func TestHyparview(t *testing.T) {
@@ -37,7 +38,10 @@ func TestHyparview(t *testing.T) {
 			ListenAddress: config.ListenAddress,
 		}
 		connManager := transport.NewConnManager(transport.NewTCPConn, transport.AcceptTcpConnsFn(self.ListenAddress))
-		node, err := NewHyParView(config.HyParViewConfig, self, connManager)
+		logger := log.New(&lumberjack.Logger{
+			Filename: fmt.Sprintf("log/%s.log", config.NodeID),
+		}, config.NodeID, log.LstdFlags|log.Lshortfile)
+		node, err := NewHyParView(config.HyParViewConfig, self, connManager, logger)
 		if err != nil {
 			log.Println(err)
 		}
@@ -49,7 +53,7 @@ func TestHyparview(t *testing.T) {
 		}
 	}
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(10 * time.Second)
 	for _, n := range nodes {
 		n.Leave()
 	}

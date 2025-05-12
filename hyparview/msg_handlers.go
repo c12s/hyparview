@@ -2,7 +2,6 @@ package hyparview
 
 import (
 	"fmt"
-	"log"
 	"math"
 
 	"github.com/c12s/hyparview/data"
@@ -14,18 +13,23 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.Join{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize Join message", "error", err)
 		return err
 	}
-	log.Printf("%s received onJoin %v\n", h.self.ID, msg)
+
+	h.logger.Println("received Join message", "self", h.self.ID, "from", msg.NodeID, "listenAddress", msg.ListenAddress)
+
 	if h.activeView.full() {
-		err := h.disconnectRandomPeer()
-		if err != nil {
+		if err := h.disconnectRandomPeer(); err != nil {
+			h.logger.Println("failed to disconnect random peer", "error", err)
 			return err
 		}
 	}
+
 	newPeer := Peer{
 		Node: data.Node{
 			ID:            msg.NodeID,
@@ -34,7 +38,8 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 		Conn: sender,
 	}
 	h.activeView.add(newPeer, true)
-	log.Printf("peer [ID=%s, address=%s] added to active view\n", newPeer.Node.ID, newPeer.Conn.GetAddress())
+	h.logger.Println("added peer to active view", "peerID", newPeer.Node.ID, "address", newPeer.Conn.GetAddress())
+
 	forwardJoinMsg := data.Message{
 		Type: data.FORWARD_JOIN,
 		Payload: data.ForwardJoin{
@@ -43,13 +48,13 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 			TTL:           h.config.ARWL,
 		},
 	}
+
 	for _, peer := range h.activeView.peers {
 		if peer.Node.ID == newPeer.Node.ID {
 			continue
 		}
-		err := peer.Conn.Send(forwardJoinMsg)
-		if err != nil {
-			log.Println(err)
+		if err := peer.Conn.Send(forwardJoinMsg); err != nil {
+			h.logger.Println("failed to send ForwardJoin message", "to", peer.Node.ID, "error", err)
 		}
 	}
 	return nil
@@ -60,16 +65,21 @@ func (h *HyParView) onDisconnect(msgBytes []byte, sender transport.Conn) error {
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.Disconnect{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize Disconnect message", "error", err)
 		return err
 	}
-	log.Printf("%s received onDisconnect %v\n", h.self.ID, msg)
+
+	h.logger.Println("received Disconnect message", "self", h.self.ID, "from", msg.NodeID)
+
 	peer, err := h.activeView.getById(msg.NodeID)
 	if err != nil {
-		return fmt.Errorf("peer %s not in active view\n", msg.NodeID)
+		return fmt.Errorf("peer %s not in active view", msg.NodeID)
 	}
+
 	h.activeView.delete(peer)
 	return h.connManager.Disconnect(peer.Conn)
 }
@@ -79,12 +89,16 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.ForwardJoin{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize ForwardJoin message", "error", err)
 		return err
 	}
-	log.Printf("%s received onForwardJoin %v\n", h.self.ID, msg)
+
+	h.logger.Println("received ForwardJoin message", "self", h.self.ID, "from", msg.NodeID, "TTL", msg.TTL)
+
 	newPeer := Peer{
 		Node: data.Node{
 			ID:            msg.NodeID,
@@ -92,40 +106,42 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 		},
 		Conn: nil,
 	}
+
 	addedToActiveView := false
 	if msg.TTL == 0 || len(h.activeView.peers) == 1 {
-		conn, err := h.connManager.Connect(msg.ListenAddress)
+		_, err := h.activeView.getById(newPeer.Node.ID)
 		if err != nil {
-			return err
-		}
-		forwardJoinAcceptMsg := data.Message{
-			Type: data.FORWARD_JOIN_ACCEPT,
-			Payload: data.ForwardJoinAccept{
-				NodeID:        h.self.ID,
-				ListenAddress: h.self.ListenAddress,
-			},
-		}
-		err = conn.Send(forwardJoinAcceptMsg)
-		if err != nil {
-			log.Println(err)
-		} else {
-			newPeer.Conn = conn
-			// if h.activeView.full() {
-			// 	err = h.disconnectRandomPeer()
-			// 	if err != nil {
-			// 		log.Println(err)
-			// 	}
-			// }
-			h.activeView.add(newPeer, true)
-			addedToActiveView = true
+			conn, err := h.connManager.Connect(msg.ListenAddress)
+			if err != nil {
+				h.logger.Println("failed to connect to peer", "address", msg.ListenAddress, "error", err)
+				return err
+			}
+			forwardJoinAcceptMsg := data.Message{
+				Type: data.FORWARD_JOIN_ACCEPT,
+				Payload: data.ForwardJoinAccept{
+					NodeID:        h.self.ID,
+					ListenAddress: h.self.ListenAddress,
+				},
+			}
+			if err := conn.Send(forwardJoinAcceptMsg); err != nil {
+				h.logger.Println("failed to send ForwardJoinAccept", "to", msg.NodeID, "error", err)
+			} else {
+				newPeer.Conn = conn
+				h.activeView.add(newPeer, true)
+				h.passiveView.delete(newPeer)
+				addedToActiveView = true
+				h.logger.Println("added peer to active view via forward join", "peerID", newPeer.Node.ID, "address", newPeer.Conn.GetAddress())
+			}
 		}
 	} else if msg.TTL == h.config.PRWL {
 		h.passiveView.add(newPeer, false)
+		h.logger.Println("added peer to passive view via forward join", "peerID", newPeer.Node.ID)
 	}
+
 	msg.TTL--
-	if !addedToActiveView {
+	if !addedToActiveView && msg.TTL >= 0 {
 		senderPeer, err := h.activeView.getByConn(sender)
-		nodeIdBlacklist := make([]string, 0)
+		nodeIdBlacklist := []string{}
 		if err == nil {
 			nodeIdBlacklist = append(nodeIdBlacklist, senderPeer.Node.ID)
 		}
@@ -145,12 +161,16 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.ForwardJoinAccept{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize ForwardJoinAccept message", "error", err)
 		return err
 	}
-	log.Printf("%s received onForwardJoinAccept %v\n", h.self.ID, msg)
+
+	h.logger.Println("received ForwardJoinAccept", "self", h.self.ID, "from", msg.NodeID)
+
 	newPeer := Peer{
 		Node: data.Node{
 			ID:            msg.NodeID,
@@ -159,7 +179,8 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 		Conn: sender,
 	}
 	h.activeView.add(newPeer, true)
-	if h.activeView.full() {
+
+	if h.activeView.overflow() {
 		return h.disconnectRandomPeer()
 	}
 	return nil
@@ -170,17 +191,20 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.Neighbor{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize Neighbor message", "error", err)
 		return err
 	}
-	log.Printf("%s received onNeighbor %v\n", h.self.ID, msg)
+
+	h.logger.Println("received Neighbor message", "self", h.self.ID, "from", msg.NodeID, "highPriority", msg.HighPriority)
+
 	accept := msg.HighPriority || !h.activeView.full()
 	if accept {
 		if h.activeView.full() {
-			err := h.disconnectRandomPeer()
-			if err != nil {
+			if err := h.disconnectRandomPeer(); err != nil {
 				return err
 			}
 		}
@@ -192,8 +216,9 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 			Conn: sender,
 		}
 		h.activeView.add(newPeer, true)
-		log.Printf("peer [ID=%s, address=%s] added to active view\n", newPeer.Node.ID, newPeer.Conn.GetAddress())
+		h.logger.Println("added peer to active view from neighbor", "peerID", newPeer.Node.ID, "address", newPeer.Conn.GetAddress())
 	}
+
 	neighborReplyMsg := data.Message{
 		Type: data.NEIGHTBOR_REPLY,
 		Payload: data.NeighborReply{
@@ -210,12 +235,16 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.NeighborReply{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize NeighborReply message", "error", err)
 		return err
 	}
-	log.Printf("%s received onNeighborReply %v\n", h.self.ID, msg)
+
+	h.logger.Println("received NeighborReply", "self", h.self.ID, "from", msg.NodeID, "accepted", msg.Accepted)
+
 	if !msg.Accepted {
 		h.replacePeer([]string{msg.NodeID})
 	} else {
@@ -226,7 +255,7 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		h.passiveView.delete(peer)
 		peer.Conn = sender
 		h.activeView.add(peer, true)
-		log.Printf("peer [ID=%s, address=%s] added to active view\n", peer.Node.ID, peer.Conn.GetAddress())
+		h.logger.Println("added peer to active view from neighbor reply", "peerID", peer.Node.ID, "address", peer.Conn.GetAddress())
 	}
 	return nil
 }
@@ -236,12 +265,16 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.Shuffle{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize Shuffle message", "error", err)
 		return err
 	}
-	log.Printf("%s received onShuffle %v\n", h.self.ID, msg)
+
+	h.logger.Println("received Shuffle", "self", h.self.ID, "from", msg.NodeID, "TTL", msg.TTL, "nodes", msg.Nodes)
+
 	msg.TTL--
 	if msg.TTL > 0 && len(h.activeView.peers) > 1 {
 		peer, err := h.activeView.selectRandom([]string{msg.NodeID}, true)
@@ -253,16 +286,18 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 			Payload: msg,
 		})
 	} else {
-		passiveViewMaxIndex := int(math.Min(float64(len(msg.Nodes)), float64(len(h.passiveView.peers))))
-		peers := h.passiveView.peers[:passiveViewMaxIndex]
+		maxIndex := int(math.Min(float64(len(msg.Nodes)), float64(len(h.passiveView.peers))))
+		peers := h.passiveView.peers[:maxIndex]
 		nodes := make([]data.Node, len(peers))
 		for i, peer := range peers {
 			nodes[i] = peer.Node
 		}
+
 		conn, err := h.connManager.Connect(msg.ListenAddress)
 		if err != nil {
 			return err
 		}
+
 		shuffleReplyMsg := data.Message{
 			Type: data.SHUFFLE_REPLY,
 			Payload: data.ShuffleReply{
@@ -270,14 +305,13 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 				Nodes:         nodes,
 			},
 		}
-		err = conn.Send(shuffleReplyMsg)
-		if err != nil {
-			log.Println(err)
+		if err := conn.Send(shuffleReplyMsg); err != nil {
+			h.logger.Println("failed to send ShuffleReply", "to", msg.ListenAddress, "error", err)
 		}
-		err = h.connManager.Disconnect(conn)
-		if err != nil {
-			log.Println(err)
+		if err := h.connManager.Disconnect(conn); err != nil {
+			h.logger.Println("failed to disconnect after sending ShuffleReply", "error", err)
 		}
+
 		h.integrateNodesIntoPartialView(msg.Nodes, []data.Node{})
 		return nil
 	}
@@ -288,12 +322,15 @@ func (h *HyParView) onShuffleReply(msgBytes []byte, sender transport.Conn) error
 	defer h.activeView.mu.Unlock()
 	h.passiveView.mu.Lock()
 	defer h.passiveView.mu.Unlock()
+
 	msg := &data.ShuffleReply{}
 	_, err := transport.Deserialize(msgBytes, msg)
 	if err != nil {
+		h.logger.Println("failed to deserialize ShuffleReply message", "error", err)
 		return err
 	}
-	log.Printf("%s received onShuffleReplyy %v\n", h.self.ID, msg)
+
+	h.logger.Println("received ShuffleReply", "self", h.self.ID, "nodes", len(msg.Nodes), "receivedNodes", len(msg.ReceivedNodes))
 	h.integrateNodesIntoPartialView(msg.Nodes, msg.ReceivedNodes)
 	return nil
 }
