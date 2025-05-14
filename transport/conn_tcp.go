@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/c12s/hyparview/data"
 )
@@ -14,7 +15,6 @@ type TCPConn struct {
 	conn         net.Conn
 	msgCh        chan []byte
 	disconnectCh chan struct{}
-	stopCh       chan struct{}
 }
 
 func NewTCPConn(address string) (Conn, error) {
@@ -31,7 +31,6 @@ func MakeTCPConn(conn net.Conn) (Conn, error) {
 		conn:         conn,
 		msgCh:        make(chan []byte),
 		disconnectCh: make(chan struct{}),
-		stopCh:       make(chan struct{}),
 	}
 	tcpConn.read()
 	return tcpConn, nil
@@ -49,6 +48,7 @@ func (t TCPConn) Send(msg data.Message) error {
 	payloadSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(payloadSize, uint32(len(payload)))
 	msgSerialized := append(payloadSize, payload...)
+	t.conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
 	_, err = t.conn.Write(msgSerialized)
 	if t.isClosed(err) {
 		t.disconnectCh <- struct{}{}
@@ -87,6 +87,7 @@ func (t TCPConn) read() {
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
+				log.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
 				break
 			}
@@ -120,11 +121,17 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 		}
 		log.Printf("Server listening on %s\n", address)
 
-		go func() {
+		go func(listener net.Listener) {
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					log.Println("Connection error:", err)
+					// log.Println("Connection error:", err)
+					if conn != nil {
+						err = conn.Close()
+						if err != nil {
+							log.Println(err)
+						}
+					}
 					continue
 				}
 				log.Printf("new TCP connection %s\n", conn.RemoteAddr().String())
@@ -133,9 +140,17 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 					log.Println(err)
 					continue
 				}
-				handler(tcpConn)
+				go handler(tcpConn)
 			}
-		}()
+		}(listener)
+		go func(stopCh chan struct{}, listener net.Listener) {
+			<-stopCh
+			log.Println("received signal to stop accepting TCP connections")
+			err := listener.Close()
+			if err != nil {
+				log.Println(err)
+			}
+		}(stopCh, listener)
 		return nil
 	}
 }

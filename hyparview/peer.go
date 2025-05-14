@@ -2,9 +2,9 @@ package hyparview
 
 import (
 	"errors"
+	"log"
 	"math/rand"
 	"slices"
-	"sync"
 
 	"github.com/c12s/hyparview/data"
 	"github.com/c12s/hyparview/transport"
@@ -17,7 +17,6 @@ type Peer struct {
 
 type PeerList struct {
 	peers    []Peer
-	mu       *sync.RWMutex
 	capacity int
 }
 
@@ -40,8 +39,9 @@ func (p *PeerList) getById(id string) (Peer, error) {
 }
 
 func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
+	log.Println("get by conn", conn.GetAddress(), p.peers)
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
-		return peer.Conn == conn
+		return peer.Conn.GetAddress() == conn.GetAddress()
 	})
 	if index < 0 {
 		return Peer{}, errors.New("tmp")
@@ -63,7 +63,7 @@ func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer,
 	return filteredPeers[index], nil
 }
 
-func (p *PeerList) delete(peer Peer) {
+func (p *PeerList) delete(peer Peer, notify chan Peer) {
 	index := slices.IndexFunc(p.peers, func(p Peer) bool {
 		return p.Node.ID == peer.Node.ID
 	})
@@ -71,9 +71,12 @@ func (p *PeerList) delete(peer Peer) {
 		return
 	}
 	p.peers = slices.Delete(p.peers, index, index+1)
+	if notify != nil {
+		notify <- peer
+	}
 }
 
-func (p *PeerList) add(peer Peer, connected bool) {
+func (p *PeerList) add(peer Peer, connected bool, notify chan Peer) {
 	if connected && peer.Conn == nil {
 		return
 	}
@@ -83,4 +86,7 @@ func (p *PeerList) add(peer Peer, connected bool) {
 		return
 	}
 	p.peers = append(p.peers, peer)
+	if notify != nil {
+		notify <- peer
+	}
 }
