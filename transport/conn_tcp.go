@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/c12s/hyparview/data"
 )
@@ -50,7 +49,6 @@ func (t TCPConn) Send(msg data.Message) error {
 	payloadSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(payloadSize, uint32(len(payload)))
 	msgSerialized := append(payloadSize, payload...)
-	t.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	_, err = t.conn.Write(msgSerialized)
 	if t.isClosed(err) {
 		t.disconnectCh <- struct{}{}

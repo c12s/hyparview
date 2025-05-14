@@ -223,6 +223,7 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 			NodeID:        h.self.ID,
 			ListenAddress: msg.ListenAddress,
 			Accepted:      accept,
+			AttemptsLeft:  msg.AttemptsLeft - 1,
 		},
 	}
 	return sender.Send(neighborReplyMsg)
@@ -239,10 +240,12 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		return err
 	}
 
-	h.logger.Println("received NeighborReply", "self", h.self.ID, "from", msg.NodeID, "accepted", msg.Accepted)
+	h.logger.Println("received NeighborReply", "self", h.self.ID, "from", msg.NodeID, "accepted", msg.Accepted, "attempts", msg.AttemptsLeft)
 
 	if !msg.Accepted {
-		h.replacePeer([]string{msg.NodeID})
+		if msg.AttemptsLeft > 0 {
+			h.replacePeer([]string{msg.NodeID}, msg.AttemptsLeft)
+		}
 	} else {
 		peer, err := h.passiveView.getById(msg.NodeID)
 		if err != nil {
@@ -291,9 +294,18 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 			nodes[i] = peer.Node
 		}
 
-		conn, err := h.connManager.Connect(msg.ListenAddress)
-		if err != nil {
-			return err
+		var conn transport.Conn
+		var tmp bool
+		p, err := h.activeView.getById(msg.NodeID)
+		if err == nil {
+			conn = p.Conn
+			tmp = false
+		} else {
+			conn, err = h.connManager.Connect(msg.ListenAddress)
+			tmp = true
+			if err != nil {
+				return err
+			}
 		}
 
 		shuffleReplyMsg := data.Message{
@@ -306,8 +318,10 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 		if err := conn.Send(shuffleReplyMsg); err != nil {
 			h.logger.Println("failed to send ShuffleReply", "to", msg.ListenAddress, "error", err)
 		}
-		if err := h.connManager.Disconnect(conn); err != nil {
-			h.logger.Println("failed to disconnect after sending ShuffleReply", "error", err)
+		if tmp {
+			if err := h.connManager.Disconnect(conn); err != nil {
+				h.logger.Println("failed to disconnect after sending ShuffleReply", "error", err)
+			}
 		}
 
 		h.integrateNodesIntoPartialView(msg.Nodes, []data.Node{})

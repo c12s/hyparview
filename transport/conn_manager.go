@@ -42,7 +42,10 @@ func (cm *ConnManager) Connect(address string) (Conn, error) {
 }
 
 func (cm *ConnManager) Disconnect(conn Conn) error {
-	return conn.disconnect()
+	if conn != nil {
+		return conn.disconnect()
+	}
+	return nil
 }
 
 func (cm *ConnManager) OnConnDown(handler func(conn Conn)) Subscription {

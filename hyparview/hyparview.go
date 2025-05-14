@@ -123,8 +123,8 @@ func (h *HyParView) Leave() {
 	h.logger.Println("stopped accepting connections")
 	h.stopShuffle <- struct{}{}
 	h.logger.Println("stopped shuffle")
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	// h.mu.Lock()
+	// defer h.mu.Unlock()
 	for _, peer := range h.activeView.peers {
 		err := h.connManager.Disconnect(peer.Conn)
 		if err != nil {
@@ -158,7 +158,7 @@ func (h *HyParView) onConnDown() transport.Subscription {
 			h.logger.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 			h.activeView.delete(peer, h.peerDown)
 			if !h.activeView.full() && !h.left {
-				h.replacePeer([]string{})
+				h.replacePeer([]string{}, 2)
 			}
 		}
 	})
@@ -222,9 +222,10 @@ func (h *HyParView) disconnectRandomPeer() error {
 	return nil
 }
 
-func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
+func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
 	for i := 0; i < 3; i++ {
+		h.logger.Println(i)
 		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist, false)
 		if err != nil {
 			h.logger.Println("no peer candidates to replace the failed peer")
@@ -243,6 +244,7 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 				NodeID:        h.self.ID,
 				ListenAddress: h.self.ListenAddress,
 				HighPriority:  len(h.activeView.peers) == 0,
+				AttemptsLeft:  attempts,
 			},
 		}
 		err = conn.Send(neighborMsg)

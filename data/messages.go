@@ -42,12 +42,14 @@ type Disconnect struct {
 type Neighbor struct {
 	NodeID        string
 	ListenAddress string
+	AttemptsLeft  int
 	HighPriority  bool
 }
 
 type NeighborReply struct {
 	NodeID        string
 	ListenAddress string
+	AttemptsLeft  int
 	Accepted      bool
 }
 
