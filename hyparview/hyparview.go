@@ -1,6 +1,7 @@
 package hyparview
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"slices"
@@ -47,7 +48,7 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 		peerDownHandler: false,
 		logger:          logger,
 		mu:              new(sync.Mutex),
-		left: false,
+		left:            false,
 	}
 
 	hv.logger.Printf("HyParView node %s initialized at %s", self.ID, self.ListenAddress)
@@ -64,7 +65,7 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 		data.SHUFFLE_REPLY:       hv.onShuffleReply,
 	}
 
-	err := connManager.StartAcceptingConns()
+	err := connManager.StartAcceptingConns(hv.self.ID)
 	go hv.shuffle()
 	return hv, err
 }
@@ -74,6 +75,10 @@ func (h *HyParView) Join(contactNodeID, contactNodeAddress string) error {
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if peer, err := h.activeView.getById(contactNodeID); err == nil {
+		return fmt.Errorf("peer %s already in active view\n", peer.Node.ID)
+	}
 
 	_ = h.connManager.OnReceive(h.onReeive)
 
@@ -146,14 +151,14 @@ func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender
 func (h *HyParView) onConnDown() transport.Subscription {
 	return h.connManager.OnConnDown(func(conn transport.Conn) {
 		h.logger.Printf("%s - conn %s down", h.self.ID, conn.GetAddress())
-		// h.mu.Lock()
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.logger.Print("lock acquired")
 		if peer, err := h.activeView.getByConn(conn); err == nil {
 			h.logger.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 			h.activeView.delete(peer, h.peerDown)
 			if !h.activeView.full() && !h.left {
-				go h.replacePeer([]string{})
-			} else {
-				// h.mu.Unlock()
+				h.replacePeer([]string{})
 			}
 		}
 	})
@@ -219,12 +224,13 @@ func (h *HyParView) disconnectRandomPeer() error {
 
 func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
-	for {
+	for i := 0; i < 3; i++ {
 		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist, false)
 		if err != nil {
 			h.logger.Println("no peer candidates to replace the failed peer")
 			break
 		}
+		nodeIdBlacklist = append(nodeIdBlacklist, candidate.Node.ID)
 		conn, err := h.connManager.Connect(candidate.Node.ListenAddress)
 		if err != nil {
 			h.logger.Println(err)
@@ -248,7 +254,6 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string) {
 		h.logger.Printf("%s sent NEIGHBOR message to %s", h.self.ID, candidate.Node.ID)
 		break
 	}
-	// h.mu.Unlock()
 }
 
 func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandidates []data.Node) {

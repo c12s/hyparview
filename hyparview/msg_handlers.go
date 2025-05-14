@@ -21,6 +21,10 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 
 	h.logger.Println("received Join message", "self", h.self.ID, "from", msg.NodeID, "listenAddress", msg.ListenAddress)
 
+	if peer, err := h.activeView.getById(msg.NodeID); err == nil {
+		return fmt.Errorf("peer %s already in active view\n", peer.Node.ID)
+	}
+
 	if h.activeView.full() {
 		if err := h.disconnectRandomPeer(); err != nil {
 			h.logger.Println("failed to disconnect random peer", "error", err)
@@ -102,7 +106,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 	}
 
 	addedToActiveView := false
-	if msg.TTL == 0 || len(h.activeView.peers) == 1 {
+	if (msg.TTL == 0 || len(h.activeView.peers) == 1) && msg.NodeID != h.self.ID {
 		_, err := h.activeView.getById(newPeer.Node.ID)
 		if err != nil {
 			conn, err := h.connManager.Connect(msg.ListenAddress)
@@ -162,6 +166,9 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 	}
 
 	h.logger.Println("received ForwardJoinAccept", "self", h.self.ID, "from", msg.NodeID)
+	if peer, err := h.activeView.getById(msg.NodeID); err == nil {
+		return fmt.Errorf("peer %s already in active view\n", peer.Node.ID)
+	}
 
 	newPeer := Peer{
 		Node: data.Node{
@@ -190,8 +197,8 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 	}
 
 	h.logger.Println("received Neighbor message", "self", h.self.ID, "from", msg.NodeID, "highPriority", msg.HighPriority)
-
-	accept := msg.HighPriority || !h.activeView.full()
+	_, err = h.activeView.getById(msg.NodeID)
+	accept := (msg.HighPriority || !h.activeView.full()) && err == nil
 	if accept {
 		if h.activeView.full() {
 			if err := h.disconnectRandomPeer(); err != nil {
@@ -206,6 +213,7 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 			Conn: sender,
 		}
 		h.activeView.add(newPeer, true, h.peerUp)
+		h.passiveView.delete(newPeer, nil)
 		h.logger.Println("added peer to active view from neighbor", "peerID", newPeer.Node.ID, "address", newPeer.Node.ListenAddress)
 	}
 
@@ -242,6 +250,10 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		}
 		h.passiveView.delete(peer, nil)
 		peer.Conn = sender
+
+		if p, err := h.activeView.getById(msg.NodeID); err == nil {
+			return fmt.Errorf("peer %s already in active view\n", p.Node.ID)
+		}
 		h.activeView.add(peer, true, h.peerUp)
 		h.logger.Println("added peer to active view from neighbor reply", "peerID", peer.Node.ID, "address", peer.Node.ListenAddress)
 	}

@@ -32,7 +32,7 @@ func TestHyparview(t *testing.T) {
 		config.ContactNodeID = config.NodeID
 		config.ContactNodeAddress = config.ListenAddress
 		config.NodeID = fmt.Sprintf("node%d", i+1)
-		config.ListenAddress = fmt.Sprintf("localhost:%d", port)
+		config.ListenAddress = fmt.Sprintf("127.0.0.1:%d", port)
 		self := data.Node{
 			ID:            config.NodeID,
 			ListenAddress: config.ListenAddress,

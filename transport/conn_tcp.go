@@ -12,7 +12,7 @@ import (
 
 type TCPConn struct {
 	address      string
-	conn         net.Conn
+	conn         *net.TCPConn
 	msgCh        chan []byte
 	disconnectCh chan struct{}
 }
@@ -22,16 +22,18 @@ func NewTCPConn(address string) (Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return MakeTCPConn(conn)
+	return MakeTCPConn(conn.(*net.TCPConn))
 }
 
-func MakeTCPConn(conn net.Conn) (Conn, error) {
+func MakeTCPConn(conn *net.TCPConn) (Conn, error) {
 	tcpConn := TCPConn{
 		address:      conn.RemoteAddr().String(),
 		conn:         conn,
 		msgCh:        make(chan []byte),
 		disconnectCh: make(chan struct{}),
 	}
+	tcpConn.conn.SetLinger(0)
+	tcpConn.conn.SetKeepAlive(true)
 	tcpConn.read()
 	return tcpConn, nil
 }
@@ -48,7 +50,7 @@ func (t TCPConn) Send(msg data.Message) error {
 	payloadSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(payloadSize, uint32(len(payload)))
 	msgSerialized := append(payloadSize, payload...)
-	t.conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	t.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	_, err = t.conn.Write(msgSerialized)
 	if t.isClosed(err) {
 		t.disconnectCh <- struct{}{}
@@ -89,14 +91,15 @@ func (t TCPConn) read() {
 			if err != nil {
 				log.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
-				break
+				return
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
+				log.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
-				break
+				return
 			}
 			t.msgCh <- payload
 		}
@@ -113,8 +116,8 @@ func (t TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(conn Conn)) error {
-	return func(stopCh chan struct{}, handler func(conn Conn)) error {
+func AcceptTcpConnsFn(address string) func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
+	return func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err
@@ -125,17 +128,11 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					// log.Println("Connection error:", err)
-					if conn != nil {
-						err = conn.Close()
-						if err != nil {
-							log.Println(err)
-						}
-					}
-					continue
+					log.Println("Connection error:", err)
+					return
 				}
-				log.Printf("new TCP connection %s\n", conn.RemoteAddr().String())
-				tcpConn, err := MakeTCPConn(conn)
+				log.Println(nodeID, "new TCP connection", conn.RemoteAddr().String())
+				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn))
 				if err != nil {
 					log.Println(err)
 					continue
