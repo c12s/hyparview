@@ -117,14 +117,12 @@ func (h *HyParView) Join(contactNodeID, contactNodeAddress string) error {
 func (h *HyParView) Leave() {
 	h.logger.Printf("%s is leaving the network", h.self.ID)
 	h.left = true
-	// h.connDownSub.Unsubscribe()
-	// h.logger.Println("stopped conn down handler")
 	h.connManager.StopAcceptingConns()
 	h.logger.Println("stopped accepting connections")
 	h.stopShuffle <- struct{}{}
 	h.logger.Println("stopped shuffle")
-	// h.mu.Lock()
-	// defer h.mu.Unlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for _, peer := range h.activeView.peers {
 		err := h.connManager.Disconnect(peer.Conn)
 		if err != nil {
@@ -165,9 +163,6 @@ func (h *HyParView) onConnDown() transport.Subscription {
 }
 
 func (h *HyParView) OnPeerUp(handler func(peer Peer)) {
-	// if h.peerUpHandler {
-	// 	return
-	// }
 	h.peerUp = make(chan Peer)
 	h.peerUpHandler = true
 	go func() {
@@ -178,9 +173,6 @@ func (h *HyParView) OnPeerUp(handler func(peer Peer)) {
 }
 
 func (h *HyParView) OnPeerDown(handler func(peer Peer)) {
-	// if h.peerDownHandler {
-	// 	return
-	// }
 	h.peerDown = make(chan Peer)
 	h.peerDownHandler = true
 	go func() {
@@ -191,6 +183,9 @@ func (h *HyParView) OnPeerDown(handler func(peer Peer)) {
 }
 
 func (h *HyParView) onReeive(received transport.MsgReceived) {
+	if h.left {
+		return
+	}
 	handler := h.msgHandlers[received.Msg.Type]
 	if handler == nil {
 		h.logger.Printf("no handler found for message type %v", received.Msg.Type)
@@ -328,6 +323,7 @@ func (h *HyParView) shuffle() {
 			}
 			peer, err := h.activeView.selectRandom([]string{}, true)
 			if err != nil {
+				h.mu.Unlock()
 				h.logger.Println("no peers in active view to perform shuffle")
 				continue
 			}

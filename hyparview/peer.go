@@ -2,7 +2,6 @@ package hyparview
 
 import (
 	"errors"
-	"log"
 	"math/rand"
 	"slices"
 
@@ -39,7 +38,6 @@ func (p *PeerList) getById(id string) (Peer, error) {
 }
 
 func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
-	log.Println("get by conn", conn.GetAddress(), p.peers)
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
 		return peer.Conn.GetAddress() == conn.GetAddress()
 	})
