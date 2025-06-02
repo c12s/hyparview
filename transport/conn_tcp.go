@@ -114,8 +114,8 @@ func (t TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
-	return func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
+func AcceptTcpConnsFn(address string) func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error {
+	return func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err

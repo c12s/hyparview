@@ -6,13 +6,13 @@ import (
 
 type ConnManager struct {
 	newConnFn          func(address string) (Conn, error)
-	acceptConnsFn      func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error
+	acceptConnsFn      func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error
 	stopAcceptingConns chan struct{}
 	connDown           chan Conn
 	messages           chan MsgReceived
 }
 
-func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error) ConnManager {
+func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error) ConnManager {
 	return ConnManager{
 		newConnFn:          newConnFn,
 		acceptConnsFn:      acceptConnsFn,
@@ -22,7 +22,7 @@ func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn 
 	}
 }
 
-func (cm *ConnManager) StartAcceptingConns(nodeID string) error {
+func (cm *ConnManager) StartAcceptingConns(nodeID int64) error {
 	return cm.acceptConnsFn(nodeID, cm.stopAcceptingConns, func(conn Conn) {
 		cm.registerConnHandlers(conn)
 	})

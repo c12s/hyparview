@@ -139,7 +139,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 	msg.TTL--
 	if !addedToActiveView && msg.TTL >= 0 {
 		senderPeer, err := h.activeView.getByConn(sender)
-		nodeIdBlacklist := []string{}
+		nodeIdBlacklist := []int64{}
 		if err == nil {
 			nodeIdBlacklist = append(nodeIdBlacklist, senderPeer.Node.ID)
 		}
@@ -244,7 +244,7 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 
 	if !msg.Accepted {
 		if msg.AttemptsLeft > 0 {
-			h.replacePeer([]string{msg.NodeID}, msg.AttemptsLeft)
+			h.replacePeer([]int64{msg.NodeID}, msg.AttemptsLeft)
 		}
 	} else {
 		peer, err := h.passiveView.getById(msg.NodeID)
@@ -278,7 +278,7 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 
 	msg.TTL--
 	if msg.TTL > 0 && len(h.activeView.peers) > 1 {
-		peer, err := h.activeView.selectRandom([]string{msg.NodeID}, true)
+		peer, err := h.activeView.selectRandom([]int64{msg.NodeID}, true)
 		if err != nil {
 			return fmt.Errorf("cannot find a peer to forward the shuffle msg")
 		}

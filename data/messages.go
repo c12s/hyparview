@@ -20,41 +20,41 @@ type Message struct {
 }
 
 type Join struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 }
 
 type ForwardJoin struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 	TTL           int
 }
 
 type ForwardJoinAccept struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 }
 
 type Disconnect struct {
-	NodeID string
+	NodeID int64
 }
 
 type Neighbor struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 	AttemptsLeft  int
 	HighPriority  bool
 }
 
 type NeighborReply struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 	AttemptsLeft  int
 	Accepted      bool
 }
 
 type Shuffle struct {
-	NodeID        string
+	NodeID        int64
 	ListenAddress string
 	Nodes         []Node
 	TTL           int

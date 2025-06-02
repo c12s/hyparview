@@ -27,7 +27,7 @@ func (p *PeerList) overflow() bool {
 	return len(p.peers) > p.capacity
 }
 
-func (p *PeerList) getById(id string) (Peer, error) {
+func (p *PeerList) getById(id int64) (Peer, error) {
 	index := slices.IndexFunc(p.peers, func(peer Peer) bool {
 		return peer.Node.ID == id
 	})
@@ -47,10 +47,10 @@ func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 	return p.peers[index], nil
 }
 
-func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer, error) {
+func (p *PeerList) selectRandom(nodeIdBlacklist []int64, connected bool) (Peer, error) {
 	filteredPeers := make([]Peer, 0)
 	for _, peer := range p.peers {
-		if (!connected || peer.Conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.Node.ID }) {
+		if (!connected || peer.Conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id int64) bool { return id == peer.Node.ID }) {
 			filteredPeers = append(filteredPeers, peer)
 		}
 	}
