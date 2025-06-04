@@ -71,11 +71,6 @@ func (t TCPConn) onDisconnect(handler func()) {
 func (t TCPConn) onReceive(handler func(msgBytes []byte)) {
 	go func() {
 		for msgBytes := range t.msgCh {
-			// msg, err := Deserialize(msgBytes, )
-			// if err != nil {
-			// 	log.Println(err)
-			// 	continue
-			// }
 			handler(msgBytes)
 		}
 	}()

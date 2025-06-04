@@ -28,7 +28,6 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 	if h.activeView.full() {
 		if err := h.disconnectRandomPeer(); err != nil {
 			h.logger.Println("failed to disconnect random peer", "error", err)
-			return err
 		}
 	}
 

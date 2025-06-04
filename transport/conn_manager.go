@@ -62,7 +62,6 @@ func (cm *ConnManager) registerConnHandlers(conn Conn) {
 }
 
 type MsgReceived struct {
-	// Msg      data.Message
 	MsgBytes []byte
 	Sender   Conn
 }
