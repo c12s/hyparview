@@ -77,10 +77,10 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 	defer h.mu.Unlock()
 
 	if peer, err := h.activeView.getById(contactNodeID); err == nil {
-		return fmt.Errorf("peer %s already in active view\n", peer.Node.ID)
+		return fmt.Errorf("peer %s already in active view", peer.Node.ID)
 	}
 
-	_ = h.connManager.OnReceive(h.onReeive)
+	_ = h.connManager.OnReceive(h.onReceive)
 
 	if contactNodeAddress == "x" || contactNodeID == h.self.ID {
 		return nil
@@ -185,7 +185,7 @@ func (h *HyParView) OnPeerDown(handler func(peer Peer)) {
 	}()
 }
 
-func (h *HyParView) onReeive(received transport.MsgReceived) {
+func (h *HyParView) onReceive(received transport.MsgReceived) {
 	if h.left {
 		return
 	}
