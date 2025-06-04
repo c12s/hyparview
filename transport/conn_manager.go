@@ -1,18 +1,14 @@
 package transport
 
-import (
-	"github.com/c12s/hyparview/data"
-)
-
 type ConnManager struct {
 	newConnFn          func(address string) (Conn, error)
-	acceptConnsFn      func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error
+	acceptConnsFn      func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error
 	stopAcceptingConns chan struct{}
 	connDown           chan Conn
 	messages           chan MsgReceived
 }
 
-func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error) ConnManager {
+func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error) ConnManager {
 	return ConnManager{
 		newConnFn:          newConnFn,
 		acceptConnsFn:      acceptConnsFn,
@@ -22,7 +18,7 @@ func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn 
 	}
 }
 
-func (cm *ConnManager) StartAcceptingConns(nodeID int64) error {
+func (cm *ConnManager) StartAcceptingConns(nodeID string) error {
 	return cm.acceptConnsFn(nodeID, cm.stopAcceptingConns, func(conn Conn) {
 		cm.registerConnHandlers(conn)
 	})
@@ -57,8 +53,8 @@ func (cm *ConnManager) OnReceive(handler func(msg MsgReceived)) Subscription {
 }
 
 func (cm *ConnManager) registerConnHandlers(conn Conn) {
-	conn.onReceive(func(msg data.Message, msgBytes []byte) {
-		cm.messages <- MsgReceived{Msg: msg, Sender: conn, MsgBytes: msgBytes}
+	conn.onReceive(func(msgBytes []byte) {
+		cm.messages <- MsgReceived{Sender: conn, MsgBytes: msgBytes}
 	})
 	conn.onDisconnect(func() {
 		cm.connDown <- conn
@@ -66,7 +62,7 @@ func (cm *ConnManager) registerConnHandlers(conn Conn) {
 }
 
 type MsgReceived struct {
-	Msg      data.Message
+	// Msg      data.Message
 	MsgBytes []byte
 	Sender   Conn
 }

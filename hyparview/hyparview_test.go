@@ -54,9 +54,9 @@ func TestHyparview(t *testing.T) {
 	}
 
 	time.Sleep(10 * time.Second)
-	for _, n := range nodes {
-		n.Leave()
-	}
+	// for _, n := range nodes {
+	// 	n.Leave()
+	// }
 
 	time.Sleep(5 * time.Second)
 	for _, n := range nodes {

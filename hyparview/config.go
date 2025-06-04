@@ -11,9 +11,9 @@ type HyParViewConfig struct {
 }
 
 type Config struct {
-	NodeID             int64  `env:"NODE_ID"`
+	NodeID             string `env:"NODE_ID"`
 	ListenAddress      string `env:"LISTEN_ADDR"`
-	ContactNodeID      int64  `env:"CONTACT_NODE_ID"`
+	ContactNodeID      string `env:"CONTACT_NODE_ID"`
 	ContactNodeAddress string `env:"CONTACT_NODE_ADDR"`
 	HyParViewConfig
 }

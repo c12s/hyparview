@@ -42,7 +42,7 @@ func (t TCPConn) GetAddress() string {
 }
 
 func (t TCPConn) Send(msg data.Message) error {
-	payload, err := serialize(msg)
+	payload, err := Serialize(msg)
 	if err != nil {
 		return err
 	}
@@ -68,15 +68,15 @@ func (t TCPConn) onDisconnect(handler func()) {
 	}()
 }
 
-func (t TCPConn) onReceive(handler func(msg data.Message, msgBytes []byte)) {
+func (t TCPConn) onReceive(handler func(msgBytes []byte)) {
 	go func() {
 		for msgBytes := range t.msgCh {
-			msg, err := Deserialize(msgBytes, nil)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			handler(msg, msgBytes)
+			// msg, err := Deserialize(msgBytes, )
+			// if err != nil {
+			// 	log.Println(err)
+			// 	continue
+			// }
+			handler(msgBytes)
 		}
 	}()
 }
@@ -114,8 +114,8 @@ func (t TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error {
-	return func(nodeID int64, stopCh chan struct{}, handler func(conn Conn)) error {
+func AcceptTcpConnsFn(address string) func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
+	return func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err

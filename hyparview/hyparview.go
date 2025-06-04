@@ -70,7 +70,7 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 	return hv, err
 }
 
-func (h *HyParView) Join(contactNodeID int64, contactNodeAddress string) error {
+func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error {
 	h.logger.Printf("%s attempting to join via %s (%s)", h.self.ID, contactNodeID, contactNodeAddress)
 
 	h.mu.Lock()
@@ -82,7 +82,7 @@ func (h *HyParView) Join(contactNodeID int64, contactNodeAddress string) error {
 
 	_ = h.connManager.OnReceive(h.onReeive)
 
-	if contactNodeAddress == "x" {
+	if contactNodeAddress == "x" || contactNodeID == h.self.ID {
 		return nil
 	}
 	conn, err := h.connManager.Connect(contactNodeAddress)
@@ -159,7 +159,7 @@ func (h *HyParView) onConnDown() transport.Subscription {
 			h.logger.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 			h.activeView.delete(peer, h.peerDown)
 			if !h.activeView.full() && !h.left {
-				h.replacePeer([]int64{}, 2)
+				h.replacePeer([]string{}, 2)
 			}
 		}
 	})
@@ -189,19 +189,25 @@ func (h *HyParView) onReeive(received transport.MsgReceived) {
 	if h.left {
 		return
 	}
-	handler := h.msgHandlers[received.Msg.Type]
+	msgType := transport.GetMsgType(received.MsgBytes)
+	handler := h.msgHandlers[msgType]
 	if handler == nil {
-		h.logger.Printf("no handler found for message type %v", received.Msg.Type)
+		h.logger.Printf("no handler found for message type %v", msgType)
 		return
 	}
-	err := handler(received.MsgBytes, received.Sender)
+	payload, err := transport.GetPayload(received.MsgBytes)
+	if err != nil {
+		h.logger.Println(err)
+		return
+	}
+	err = handler(payload, received.Sender)
 	if err != nil {
 		h.logger.Println(err)
 	}
 }
 
 func (h *HyParView) disconnectRandomPeer() error {
-	disconnectPeer, err := h.activeView.selectRandom([]int64{}, true)
+	disconnectPeer, err := h.activeView.selectRandom([]string{}, true)
 	if err != nil {
 		return nil
 	}
@@ -220,7 +226,7 @@ func (h *HyParView) disconnectRandomPeer() error {
 	return nil
 }
 
-func (h *HyParView) replacePeer(nodeIdBlacklist []int64, attempts int) {
+func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
 	for i := 0; i < 3; i++ {
 		h.logger.Println(i)
@@ -283,7 +289,7 @@ func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandi
 				}
 			}
 			if len(h.passiveView.peers) >= passiveViewLen {
-				peer, err := h.passiveView.selectRandom([]int64{}, false)
+				peer, err := h.passiveView.selectRandom([]string{}, false)
 				if err == nil {
 					h.passiveView.delete(peer, nil)
 				}
@@ -324,7 +330,7 @@ func (h *HyParView) shuffle() {
 					TTL:           h.config.ARWL,
 				},
 			}
-			peer, err := h.activeView.selectRandom([]int64{}, true)
+			peer, err := h.activeView.selectRandom([]string{}, true)
 			if err != nil {
 				h.mu.Unlock()
 				h.logger.Println("no peers in active view to perform shuffle")

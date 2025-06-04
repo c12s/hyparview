@@ -3,31 +3,46 @@ package transport
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/c12s/hyparview/data"
 )
 
-func serialize(msg data.Message) ([]byte, error) {
+func Serialize(msg data.Message) ([]byte, error) {
 	typeByte := byte(msg.Type)
 	typeBytes := []byte{typeByte}
-	payloadBytes, err := json.Marshal(msg.Payload)
+	payloadBytes := []byte{}
+	var err error = nil
+	switch payload := msg.Payload.(type) {
+	case []byte:
+		payloadBytes = payload
+	default:
+		payloadBytes, err = json.Marshal(msg.Payload)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return append(typeBytes, payloadBytes...), nil
 }
 
-func Deserialize(msgSerialized []byte, payload any) (data.Message, error) {
-	if len(msgSerialized) == 0 {
-		return data.Message{}, errors.New("message empty")
+func GetMsgType(msgBytes []byte) data.MessageType {
+	if len(msgBytes) == 0 {
+		return data.UNKNOWN
 	}
-	msgType := data.MessageType(int8(msgSerialized[0]))
-	var err error = nil
-	if payload != nil {
-		err = json.Unmarshal(msgSerialized[1:], payload)
+	msgType := data.MessageType(int8(msgBytes[0]))
+	if !slices.Contains(data.KnownMsgTypes(), msgType) {
+		return data.UNKNOWN
 	}
-	return data.Message{
-		Type:    msgType,
-		Payload: payload,
-	}, err
+	return msgType
+}
+
+func GetPayload(msgBytes []byte) ([]byte, error) {
+	if len(msgBytes) == 0 {
+		return nil, errors.New("empty message")
+	}
+	return msgBytes[1:], nil
+}
+
+func Deserialize(payloadBytes []byte, payload any) error {
+	return json.Unmarshal(payloadBytes, payload)
 }
