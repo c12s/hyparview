@@ -11,7 +11,7 @@ import (
 func Serialize(msg data.Message) ([]byte, error) {
 	typeByte := byte(msg.Type)
 	typeBytes := []byte{typeByte}
-	payloadBytes := []byte{}
+	var payloadBytes []byte
 	var err error = nil
 	switch payload := msg.Payload.(type) {
 	case []byte:

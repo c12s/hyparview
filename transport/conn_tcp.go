@@ -2,7 +2,6 @@ package transport
 
 import (
 	"encoding/binary"
-	"log"
 	"net"
 	"strings"
 
@@ -82,7 +81,7 @@ func (t TCPConn) read() {
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
-				log.Println("tcp read error:", err)
+				data.LOG.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
 				return
 			}
@@ -90,7 +89,7 @@ func (t TCPConn) read() {
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
-				log.Println("tcp read error:", err)
+				data.LOG.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
 				return
 			}
@@ -109,25 +108,25 @@ func (t TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
-	return func(nodeID string, stopCh chan struct{}, handler func(conn Conn)) error {
+func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(conn Conn)) error {
+	return func(stopCh chan struct{}, handler func(conn Conn)) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err
 		}
-		log.Printf("Server listening on %s\n", address)
+		data.LOG.Printf("Server listening on %s\n", address)
 
 		go func(listener net.Listener) {
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					log.Println("Connection error:", err)
+					data.LOG.Println("Connection error:", err)
 					return
 				}
-				log.Println(nodeID, "new TCP connection", conn.RemoteAddr().String())
+				data.LOG.Println("new TCP connection", conn.RemoteAddr().String())
 				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn))
 				if err != nil {
-					log.Println(err)
+					data.LOG.Println(err)
 					continue
 				}
 				go handler(tcpConn)
@@ -135,10 +134,10 @@ func AcceptTcpConnsFn(address string) func(nodeID string, stopCh chan struct{}, 
 		}(listener)
 		go func(stopCh chan struct{}, listener net.Listener) {
 			<-stopCh
-			log.Println("received signal to stop accepting TCP connections")
+			data.LOG.Println("received signal to stop accepting TCP connections")
 			err := listener.Close()
 			if err != nil {
-				log.Println(err)
+				data.LOG.Println(err)
 			}
 		}(stopCh, listener)
 		return nil
