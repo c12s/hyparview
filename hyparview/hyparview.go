@@ -2,7 +2,6 @@ package hyparview
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"slices"
 	"sync"
@@ -14,7 +13,7 @@ import (
 
 type HyParView struct {
 	self            data.Node
-	config          HyParViewConfig
+	config          Config
 	activeView      *PeerList
 	passiveView     *PeerList
 	connManager     transport.ConnManager
@@ -25,12 +24,11 @@ type HyParView struct {
 	peerUpHandler   bool
 	peerDownHandler bool
 	left            bool
-	logger          *log.Logger
 	mu              *sync.Mutex
 	connDownSub     transport.Subscription
 }
 
-func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.ConnManager, logger *log.Logger) (*HyParView, error) {
+func NewHyParView(config Config, self data.Node, connManager transport.ConnManager) (*HyParView, error) {
 	hv := &HyParView{
 		self:   self,
 		config: config,
@@ -46,12 +44,11 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 		stopShuffle:     make(chan struct{}),
 		peerUpHandler:   false,
 		peerDownHandler: false,
-		logger:          logger,
 		mu:              new(sync.Mutex),
 		left:            false,
 	}
 
-	hv.logger.Printf("HyParView node %s initialized at %s", self.ID, self.ListenAddress)
+	data.LOG.Printf("HyParView node %s initialized at %s", self.ID, self.ListenAddress)
 	hv.connDownSub = hv.onConnDown()
 
 	hv.msgHandlers = map[data.MessageType]func(msgAny []byte, sender transport.Conn) error{
@@ -65,13 +62,13 @@ func NewHyParView(config HyParViewConfig, self data.Node, connManager transport.
 		data.SHUFFLE_REPLY:       hv.onShuffleReply,
 	}
 
-	err := connManager.StartAcceptingConns(hv.self.ID)
+	err := connManager.StartAcceptingConns()
 	go hv.shuffle()
 	return hv, err
 }
 
 func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error {
-	h.logger.Printf("%s attempting to join via %s (%s)", h.self.ID, contactNodeID, contactNodeAddress)
+	data.LOG.Printf("%s attempting to join via %s (%s)", h.self.ID, contactNodeID, contactNodeAddress)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -82,12 +79,12 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 
 	_ = h.connManager.OnReceive(h.onReceive)
 
-	if contactNodeAddress == "x" || contactNodeID == h.self.ID {
+	if contactNodeAddress == "" || contactNodeAddress == "x" || contactNodeID == h.self.ID {
 		return nil
 	}
 	conn, err := h.connManager.Connect(contactNodeAddress)
 	if err != nil {
-		h.logger.Printf("%s failed to connect to %s: %v", h.self.ID, contactNodeAddress, err)
+		data.LOG.Printf("%s failed to connect to %s: %v", h.self.ID, contactNodeAddress, err)
 		return err
 	}
 
@@ -101,7 +98,7 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 
 	err = conn.Send(msg)
 	if err != nil {
-		h.logger.Printf("%s failed to send JOIN message to %s: %v", h.self.ID, contactNodeID, err)
+		data.LOG.Printf("%s failed to send JOIN message to %s: %v", h.self.ID, contactNodeID, err)
 		return err
 	}
 
@@ -113,23 +110,23 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 		Conn: conn,
 	}
 	h.activeView.add(newPeer, true, h.peerUp)
-	h.logger.Printf("%s successfully connected to %s", h.self.ID, contactNodeID)
+	data.LOG.Printf("%s successfully connected to %s", h.self.ID, contactNodeID)
 	return nil
 }
 
 func (h *HyParView) Leave() {
-	h.logger.Printf("%s is leaving the network", h.self.ID)
+	data.LOG.Printf("%s is leaving the network", h.self.ID)
 	h.left = true
 	h.connManager.StopAcceptingConns()
-	h.logger.Println("stopped accepting connections")
+	data.LOG.Println("stopped accepting connections")
 	h.stopShuffle <- struct{}{}
-	h.logger.Println("stopped shuffle")
+	data.LOG.Println("stopped shuffle")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, peer := range h.activeView.peers {
 		err := h.connManager.Disconnect(peer.Conn)
 		if err != nil {
-			log.Println(err)
+			data.LOG.Println(err)
 		}
 	}
 }
@@ -151,12 +148,12 @@ func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender
 
 func (h *HyParView) onConnDown() transport.Subscription {
 	return h.connManager.OnConnDown(func(conn transport.Conn) {
-		h.logger.Printf("%s - conn %s down", h.self.ID, conn.GetAddress())
+		data.LOG.Printf("%s - conn %s down", h.self.ID, conn.GetAddress())
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		h.logger.Print("lock acquired")
+		data.LOG.Print("lock acquired")
 		if peer, err := h.activeView.getByConn(conn); err == nil {
-			h.logger.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
+			data.LOG.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 			h.activeView.delete(peer, h.peerDown)
 			if !h.activeView.full() && !h.left {
 				h.replacePeer([]string{}, 2)
@@ -192,17 +189,17 @@ func (h *HyParView) onReceive(received transport.MsgReceived) {
 	msgType := transport.GetMsgType(received.MsgBytes)
 	handler := h.msgHandlers[msgType]
 	if handler == nil {
-		h.logger.Printf("no handler found for message type %v", msgType)
+		data.LOG.Printf("no handler found for message type %v", msgType)
 		return
 	}
 	payload, err := transport.GetPayload(received.MsgBytes)
 	if err != nil {
-		h.logger.Println(err)
+		data.LOG.Println(err)
 		return
 	}
 	err = handler(payload, received.Sender)
 	if err != nil {
-		h.logger.Println(err)
+		data.LOG.Println(err)
 	}
 }
 
@@ -211,7 +208,7 @@ func (h *HyParView) disconnectRandomPeer() error {
 	if err != nil {
 		return nil
 	}
-	h.logger.Printf("%s is disconnecting random peer %s", h.self.ID, disconnectPeer.Node.ID)
+	data.LOG.Printf("%s is disconnecting random peer %s", h.self.ID, disconnectPeer.Node.ID)
 	h.activeView.delete(disconnectPeer, h.peerDown)
 	disconnectMsg := data.Message{
 		Type: data.DISCONNECT,
@@ -227,18 +224,18 @@ func (h *HyParView) disconnectRandomPeer() error {
 }
 
 func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
-	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
+	data.LOG.Printf("%s attempting to replace failed peer", h.self.ID)
 	for i := 0; i < 3; i++ {
-		h.logger.Println(i)
+		data.LOG.Println(i)
 		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist, false)
 		if err != nil {
-			h.logger.Println("no peer candidates to replace the failed peer")
+			data.LOG.Println("no peer candidates to replace the failed peer")
 			break
 		}
 		nodeIdBlacklist = append(nodeIdBlacklist, candidate.Node.ID)
 		conn, err := h.connManager.Connect(candidate.Node.ListenAddress)
 		if err != nil {
-			h.logger.Println(err)
+			data.LOG.Println(err)
 			h.passiveView.delete(candidate, nil)
 			continue
 		}
@@ -253,18 +250,18 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 		}
 		err = conn.Send(neighborMsg)
 		if err != nil {
-			h.logger.Println(err)
+			data.LOG.Println(err)
 			h.passiveView.delete(candidate, nil)
 			continue
 		}
-		h.logger.Printf("%s sent NEIGHBOR message to %s", h.self.ID, candidate.Node.ID)
+		data.LOG.Printf("%s sent NEIGHBOR message to %s", h.self.ID, candidate.Node.ID)
 		break
 	}
 }
 
 func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandidates []data.Node) {
-	h.logger.Println("integrating shuffle peers into passive view")
-	h.logger.Println("before integration", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
+	data.LOG.Println("integrating shuffle peers into passive view")
+	data.LOG.Println("before integration", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
 	nodes = slices.DeleteFunc(nodes, func(node data.Node) bool {
 		return node.ID == h.self.ID || slices.ContainsFunc(append(h.activeView.peers, h.passiveView.peers...), func(peer Peer) bool {
 			return peer.Node.ID == node.ID
@@ -299,7 +296,7 @@ func (h *HyParView) integrateNodesIntoPartialView(nodes []data.Node, deleteCandi
 			h.passiveView.add(Peer{Node: node}, false, nil)
 		}
 	}
-	h.logger.Println("after integration", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
+	data.LOG.Println("after integration", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
 }
 
 func (h *HyParView) shuffle() {
@@ -308,8 +305,8 @@ func (h *HyParView) shuffle() {
 		select {
 		case <-ticker.C:
 			h.mu.Lock()
-			h.logger.Printf("%s shuffle triggered\n", h.self.ID)
-			h.logger.Println("before shuffle", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
+			data.LOG.Printf("%s shuffle triggered\n", h.self.ID)
+			data.LOG.Println("before shuffle", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
 			activeViewMaxIndex := int(math.Min(float64(h.config.Ka), float64(len(h.activeView.peers))))
 			passiveViewMaxIndex := int(math.Min(float64(h.config.Kp), float64(len(h.passiveView.peers))))
 			activePeers := make([]Peer, activeViewMaxIndex)
@@ -333,17 +330,17 @@ func (h *HyParView) shuffle() {
 			peer, err := h.activeView.selectRandom([]string{}, true)
 			if err != nil {
 				h.mu.Unlock()
-				h.logger.Println("no peers in active view to perform shuffle")
+				data.LOG.Println("no peers in active view to perform shuffle")
 				continue
 			}
 			err = peer.Conn.Send(shuffleMsg)
 			if err != nil {
-				h.logger.Println(err)
+				data.LOG.Println(err)
 			}
-			h.logger.Println("after shuffle", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
+			data.LOG.Println("after shuffle", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
 			h.mu.Unlock()
 		case <-h.stopShuffle:
-			h.logger.Println("stop shuffle")
+			data.LOG.Println("stop shuffle")
 			return
 		}
 	}
