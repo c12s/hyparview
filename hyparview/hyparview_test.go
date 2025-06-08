@@ -3,6 +3,7 @@ package hyparview
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -38,7 +39,13 @@ func TestHyparview(t *testing.T) {
 			ListenAddress: listenAddress,
 		}
 		connManager := transport.NewConnManager(transport.NewTCPConn, transport.AcceptTcpConnsFn(self.ListenAddress))
-		node, err := NewHyParView(config, self, connManager)
+		hvLogFile, err := os.Create(fmt.Sprintf("log/hv_%s.log", nodeID))
+		if err != nil {
+			log.Fatalf("error opening file: %v", err)
+		}
+		defer hvLogFile.Close()
+		logger := log.New(hvLogFile, "", log.LstdFlags|log.Lshortfile)
+		node, err := NewHyParView(config, self, connManager, logger)
 		if err != nil {
 			log.Println(err)
 		}

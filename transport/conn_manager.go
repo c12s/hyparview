@@ -1,14 +1,16 @@
 package transport
 
+import "log"
+
 type ConnManager struct {
-	newConnFn          func(address string) (Conn, error)
-	acceptConnsFn      func(stopCh chan struct{}, handler func(conn Conn)) error
+	newConnFn          func(address string, logger *log.Logger) (Conn, error)
+	acceptConnsFn      func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error
 	stopAcceptingConns chan struct{}
 	connDown           chan Conn
 	messages           chan MsgReceived
 }
 
-func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn func(stopCh chan struct{}, handler func(conn Conn)) error) ConnManager {
+func NewConnManager(newConnFn func(address string, logger *log.Logger) (Conn, error), acceptConnsFn func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error) ConnManager {
 	return ConnManager{
 		newConnFn:          newConnFn,
 		acceptConnsFn:      acceptConnsFn,
@@ -18,18 +20,18 @@ func NewConnManager(newConnFn func(address string) (Conn, error), acceptConnsFn 
 	}
 }
 
-func (cm *ConnManager) StartAcceptingConns() error {
+func (cm *ConnManager) StartAcceptingConns(logger *log.Logger) error {
 	return cm.acceptConnsFn(cm.stopAcceptingConns, func(conn Conn) {
 		cm.registerConnHandlers(conn)
-	})
+	}, logger)
 }
 
 func (cm *ConnManager) StopAcceptingConns() {
 	cm.stopAcceptingConns <- struct{}{}
 }
 
-func (cm *ConnManager) Connect(address string) (Conn, error) {
-	conn, err := cm.newConnFn(address)
+func (cm *ConnManager) Connect(address string, logger *log.Logger) (Conn, error) {
+	conn, err := cm.newConnFn(address, logger)
 	if err != nil {
 		return nil, err
 	}

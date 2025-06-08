@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/binary"
+	"log"
 	"net"
 	"strings"
 
@@ -13,22 +14,24 @@ type TCPConn struct {
 	conn         *net.TCPConn
 	msgCh        chan []byte
 	disconnectCh chan struct{}
+	logger       *log.Logger
 }
 
-func NewTCPConn(address string) (Conn, error) {
+func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
 	}
-	return MakeTCPConn(conn.(*net.TCPConn))
+	return MakeTCPConn(conn.(*net.TCPConn), logger)
 }
 
-func MakeTCPConn(conn *net.TCPConn) (Conn, error) {
+func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
 	tcpConn := TCPConn{
 		address:      conn.RemoteAddr().String(),
 		conn:         conn,
 		msgCh:        make(chan []byte),
 		disconnectCh: make(chan struct{}),
+		logger:       logger,
 	}
 	tcpConn.conn.SetLinger(0)
 	tcpConn.conn.SetKeepAlive(true)
@@ -81,7 +84,7 @@ func (t TCPConn) read() {
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
-				data.LOG.Println("tcp read error:", err)
+				t.logger.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
 				return
 			}
@@ -89,7 +92,7 @@ func (t TCPConn) read() {
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
-				data.LOG.Println("tcp read error:", err)
+				t.logger.Println("tcp read error:", err)
 				t.disconnectCh <- struct{}{}
 				return
 			}
@@ -108,25 +111,25 @@ func (t TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(conn Conn)) error {
-	return func(stopCh chan struct{}, handler func(conn Conn)) error {
+func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error {
+	return func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
 			return err
 		}
-		data.LOG.Printf("Server listening on %s\n", address)
+		logger.Printf("Server listening on %s\n", address)
 
 		go func(listener net.Listener) {
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					data.LOG.Println("Connection error:", err)
+					logger.Println("Connection error:", err)
 					return
 				}
-				data.LOG.Println("new TCP connection", conn.RemoteAddr().String())
-				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn))
+				logger.Println("new TCP connection", conn.RemoteAddr().String())
+				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), logger)
 				if err != nil {
-					data.LOG.Println(err)
+					logger.Println(err)
 					continue
 				}
 				go handler(tcpConn)
@@ -134,10 +137,10 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 		}(listener)
 		go func(stopCh chan struct{}, listener net.Listener) {
 			<-stopCh
-			data.LOG.Println("received signal to stop accepting TCP connections")
+			logger.Println("received signal to stop accepting TCP connections")
 			err := listener.Close()
 			if err != nil {
-				data.LOG.Println(err)
+				logger.Println(err)
 			}
 		}(stopCh, listener)
 		return nil
