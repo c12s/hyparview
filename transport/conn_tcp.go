@@ -118,6 +118,7 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 			return err
 		}
 		logger.Printf("Server listening on %s\n", address)
+		var conns []net.Conn
 
 		go func(listener net.Listener) {
 			for {
@@ -127,6 +128,7 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 					return
 				}
 				logger.Println("new TCP connection", conn.RemoteAddr().String())
+				conns = append(conns, conn)
 				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), logger)
 				if err != nil {
 					logger.Println(err)
@@ -141,6 +143,9 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 			err := listener.Close()
 			if err != nil {
 				logger.Println(err)
+			}
+			for _, conn := range conns {
+				conn.Close()
 			}
 		}(stopCh, listener)
 		return nil
