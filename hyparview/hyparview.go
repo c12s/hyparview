@@ -64,10 +64,7 @@ func NewHyParView(config Config, self data.Node, connManager transport.ConnManag
 		data.SHUFFLE:             hv.onShuffle,
 		data.SHUFFLE_REPLY:       hv.onShuffleReply,
 	}
-
-	err := connManager.StartAcceptingConns(hv.logger)
-	go hv.shuffle()
-	return hv, err
+	return hv, nil
 }
 
 func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error {
@@ -80,7 +77,13 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 		return fmt.Errorf("peer %s already in active view", peer.Node.ID)
 	}
 
+	h.left = false
+	err := h.connManager.StartAcceptingConns(h.logger)
+	if err != nil {
+		return err
+	}
 	_ = h.connManager.OnReceive(h.onReceive)
+	go h.shuffle()
 
 	if contactNodeAddress == "" || contactNodeAddress == "x" || contactNodeID == h.self.ID {
 		return nil
