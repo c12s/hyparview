@@ -9,6 +9,7 @@ import (
 )
 
 func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -62,6 +63,7 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 }
 
 func (h *HyParView) onDisconnect(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -84,6 +86,7 @@ func (h *HyParView) onDisconnect(msgBytes []byte, sender transport.Conn) error {
 }
 
 func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -154,6 +157,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 }
 
 func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -192,6 +196,7 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 // kada cvor 1 napusta mrezu, konekcija koju cuva cvor 2 nece se zatvoriti
 // jer je cvor 1 ne cuva u svom active view
 func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -236,6 +241,7 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 }
 
 func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -270,6 +276,7 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 }
 
 func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -336,6 +343,7 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 }
 
 func (h *HyParView) onShuffleReply(msgBytes []byte, sender transport.Conn) error {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

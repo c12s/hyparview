@@ -70,6 +70,7 @@ func NewHyParView(config Config, self data.Node, connManager transport.ConnManag
 func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error {
 	h.logger.Printf("%s attempting to join via %s (%s)", h.self.ID, contactNodeID, contactNodeAddress)
 
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -127,6 +128,7 @@ func (h *HyParView) Leave() {
 	h.logger.Println("stopped accepting connections")
 	h.stopShuffle <- struct{}{}
 	h.logger.Println("stopped shuffle")
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, peer := range h.activeView.peers {
@@ -142,6 +144,7 @@ func (h *HyParView) Self() data.Node {
 }
 
 func (h *HyParView) GetPeers(num int) []Peer {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	peers := make([]Peer, len(h.activeView.peers))
@@ -151,6 +154,7 @@ func (h *HyParView) GetPeers(num int) []Peer {
 }
 
 func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender transport.Conn) error) {
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.msgHandlers[data.CUSTOM] = customMsgHandler
@@ -159,6 +163,7 @@ func (h *HyParView) AddCustomMsgHandler(customMsgHandler func(msg []byte, sender
 func (h *HyParView) onConnDown() transport.Subscription {
 	return h.connManager.OnConnDown(func(conn transport.Conn) {
 		h.logger.Printf("%s - conn %s down", h.self.ID, conn.GetAddress())
+		h.logger.Println("try lock")
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.logger.Print("lock acquired")
@@ -197,6 +202,7 @@ func (h *HyParView) onReceive(received transport.MsgReceived) {
 		return
 	}
 	msgType := transport.GetMsgType(received.MsgBytes)
+	h.logger.Println("try lock")
 	h.mu.Lock()
 	handler := h.msgHandlers[msgType]
 	h.mu.Unlock()
@@ -316,6 +322,7 @@ func (h *HyParView) shuffle() {
 	for {
 		select {
 		case <-ticker.C:
+			h.logger.Println("try lock")
 			h.mu.Lock()
 			h.logger.Printf("%s shuffle triggered\n", h.self.ID)
 			h.logger.Println("before shuffle", "active view", h.activeView.peers, "passive view", h.passiveView.peers)
