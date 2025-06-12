@@ -126,6 +126,11 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 			if err := conn.Send(forwardJoinAcceptMsg); err != nil {
 				h.logger.Println("failed to send ForwardJoinAccept", "to", msg.NodeID, "error", err)
 			} else {
+				if h.activeView.full() {
+					if err := h.disconnectRandomPeer(); err != nil {
+						h.logger.Println("failed to disconnect random peer", "error", err)
+					}
+				}
 				newPeer.Conn = conn
 				h.activeView.add(newPeer, true, h.peerUp)
 				h.passiveView.delete(newPeer, nil)
@@ -141,7 +146,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 	msg.TTL--
 	if !addedToActiveView && msg.TTL >= 0 {
 		senderPeer, err := h.activeView.getByConn(sender)
-		nodeIdBlacklist := []string{}
+		nodeIdBlacklist := []string{msg.NodeID}
 		if err == nil {
 			nodeIdBlacklist = append(nodeIdBlacklist, senderPeer.Node.ID)
 		}
@@ -173,6 +178,11 @@ func (h *HyParView) onForwardJoinAccept(msgBytes []byte, sender transport.Conn) 
 		return fmt.Errorf("peer %s already in active view", peer.Node.ID)
 	}
 
+	if h.activeView.full() {
+		if err := h.disconnectRandomPeer(); err != nil {
+			h.logger.Println("failed to disconnect random peer", "error", err)
+		}
+	}
 	newPeer := Peer{
 		Node: data.Node{
 			ID:            msg.NodeID,
@@ -260,14 +270,45 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		}
 	} else {
 		peer, err := h.passiveView.getById(msg.NodeID)
+		// nije u pv
 		if err != nil {
+			// jeste u av
+			if p, err := h.activeView.getById(msg.NodeID); err == nil {
+				myConn := sender
+				theirConn := p.Conn
+				if h.self.ID > p.Node.ID {
+					p.Conn = myConn
+				} else {
+					p.Conn = theirConn
+					err := h.connManager.Disconnect(myConn)
+					if err != nil {
+						h.logger.Println(err)
+					}
+				}
+			}
 			return fmt.Errorf("peer [ID=%s] not found in passive view", msg.NodeID)
 		}
 		h.passiveView.delete(peer, nil)
 		peer.Conn = sender
 
 		if p, err := h.activeView.getById(msg.NodeID); err == nil {
-			return fmt.Errorf("peer %s already in active view", p.Node.ID)
+			myConn := sender
+			theirConn := p.Conn
+			if h.self.ID > p.Node.ID {
+				p.Conn = myConn
+			} else {
+				p.Conn = theirConn
+				err := h.connManager.Disconnect(myConn)
+				if err != nil {
+					h.logger.Println(err)
+				}
+			}
+			return fmt.Errorf("peer %s already in active view", peer.Node.ID)
+		}
+		if h.activeView.full() {
+			if err := h.disconnectRandomPeer(); err != nil {
+				h.logger.Println("failed to disconnect random peer", "error", err)
+			}
 		}
 		h.activeView.add(peer, true, h.peerUp)
 		h.logger.Println("added peer to active view from neighbor reply", "peerID", peer.Node.ID, "address", peer.Node.ListenAddress)

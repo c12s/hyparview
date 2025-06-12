@@ -47,7 +47,7 @@ func NewHyParView(config Config, self data.Node, connManager transport.ConnManag
 		peerUpHandler:   false,
 		peerDownHandler: false,
 		mu:              new(sync.Mutex),
-		left:            false,
+		left:            true,
 		logger:          logger,
 	}
 
@@ -122,6 +122,10 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 }
 
 func (h *HyParView) Leave() {
+	if h.left {
+		h.logger.Printf("%s already left the network", h.self.ID)
+		return
+	}
 	h.logger.Printf("%s is leaving the network", h.self.ID)
 	h.left = true
 	h.connManager.StopAcceptingConns()
@@ -227,14 +231,15 @@ func (h *HyParView) disconnectRandomPeer() error {
 		return nil
 	}
 	h.logger.Printf("%s is disconnecting random peer %s", h.self.ID, disconnectPeer.Node.ID)
-	h.activeView.delete(disconnectPeer, h.peerDown)
-	disconnectMsg := data.Message{
-		Type: data.DISCONNECT,
-		Payload: data.Disconnect{
-			NodeID: h.self.ID,
-		},
-	}
-	err = disconnectPeer.Conn.Send(disconnectMsg)
+	// h.activeView.delete(disconnectPeer, h.peerDown)
+	err = h.connManager.Disconnect(disconnectPeer.Conn)
+	// disconnectMsg := data.Message{
+	// 	Type: data.DISCONNECT,
+	// 	Payload: data.Disconnect{
+	// 		NodeID: h.self.ID,
+	// 	},
+	// }
+	// err = disconnectPeer.Conn.Send(disconnectMsg)
 	if err != nil {
 		return err
 	}
