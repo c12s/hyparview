@@ -41,7 +41,7 @@ func (cm *ConnManager) Connect(address string, logger *log.Logger) (Conn, error)
 
 func (cm *ConnManager) Disconnect(conn Conn) error {
 	if conn != nil {
-		return conn.disconnect()
+		return conn.Disconnect()
 	}
 	return nil
 }

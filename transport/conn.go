@@ -6,6 +6,6 @@ type Conn interface {
 	GetAddress() string
 	Send(msg data.Message) error
 	onReceive(handler func(msgBytes []byte))
-	disconnect() error
+	Disconnect() error
 	onDisconnect(handler func())
 }

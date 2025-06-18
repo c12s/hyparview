@@ -219,7 +219,9 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 
 	h.logger.Println("received Neighbor message", "self", h.self.ID, "from", msg.NodeID, "highPriority", msg.HighPriority)
 	_, err = h.activeView.getById(msg.NodeID)
-	accept := (msg.HighPriority || !h.activeView.full()) && err != nil
+	_, iSentNeigbor := h.activeNeightbor[msg.NodeID]
+	// prihvati samo ako ti vec nisi poslao neighbor zahtev
+	accept := (msg.HighPriority || !h.activeView.full()) && err != nil && !iSentNeigbor
 	if accept {
 		if h.activeView.full() {
 			if err := h.disconnectRandomPeer(); err != nil {
@@ -274,6 +276,8 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 		if err != nil {
 			// jeste u av
 			if p, err := h.activeView.getById(msg.NodeID); err == nil {
+				// ne cekas odgovor vise
+				delete(h.activeNeightbor, p.Node.ID)
 				myConn := sender
 				theirConn := p.Conn
 				if h.self.ID > p.Node.ID {
@@ -285,11 +289,14 @@ func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) erro
 						h.logger.Println(err)
 					}
 				}
+				h.peerUp <- p
 			}
 			return fmt.Errorf("peer [ID=%s] not found in passive view", msg.NodeID)
 		}
 		h.passiveView.delete(peer, nil)
 		peer.Conn = sender
+		// ne cekas odgovor vise
+		delete(h.activeNeightbor, peer.Node.ID)
 
 		if p, err := h.activeView.getById(msg.NodeID); err == nil {
 			myConn := sender

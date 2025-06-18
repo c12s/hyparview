@@ -3,6 +3,7 @@ package hyparview
 import (
 	"fmt"
 	"log"
+	"maps"
 	"math"
 	"slices"
 	"sync"
@@ -28,6 +29,7 @@ type HyParView struct {
 	mu              *sync.Mutex
 	connDownSub     transport.Subscription
 	logger          *log.Logger
+	activeNeightbor map[string]int
 }
 
 func NewHyParView(config Config, self data.Node, connManager transport.ConnManager, logger *log.Logger) (*HyParView, error) {
@@ -49,6 +51,7 @@ func NewHyParView(config Config, self data.Node, connManager transport.ConnManag
 		mu:              new(sync.Mutex),
 		left:            true,
 		logger:          logger,
+		activeNeightbor: make(map[string]int),
 	}
 
 	hv.logger.Printf("HyParView node %s initialized at %s", self.ID, self.ListenAddress)
@@ -78,13 +81,15 @@ func (h *HyParView) Join(contactNodeID string, contactNodeAddress string) error 
 		return fmt.Errorf("peer %s already in active view", peer.Node.ID)
 	}
 
-	h.left = false
-	err := h.connManager.StartAcceptingConns(h.logger)
-	if err != nil {
-		return err
+	if h.left {
+		err := h.connManager.StartAcceptingConns(h.logger)
+		if err != nil {
+			return err
+		}
+		_ = h.connManager.OnReceive(h.onReceive)
+		go h.shuffle()
 	}
-	_ = h.connManager.OnReceive(h.onReceive)
-	go h.shuffle()
+	h.left = false
 
 	if contactNodeAddress == "" || contactNodeAddress == "x" || contactNodeID == h.self.ID {
 		return nil
@@ -248,11 +253,12 @@ func (h *HyParView) disconnectRandomPeer() error {
 
 func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
-	for i := 0; i < 3; i++ {
-		h.logger.Println(i)
+	// nemoj slati onima kojima si vec poslao
+	nodeIdBlacklist = append(nodeIdBlacklist, slices.Collect(maps.Keys(h.activeNeightbor))...)
+	for {
 		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist, false)
 		if err != nil {
-			h.logger.Println("no peer candidates to replace the failed peer")
+			h.logger.Println("no peer candidates to replace the failed peer, blacklist", nodeIdBlacklist, "active neighbor", h.activeNeightbor)
 			break
 		}
 		nodeIdBlacklist = append(nodeIdBlacklist, candidate.Node.ID)
@@ -277,6 +283,8 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 			h.passiveView.delete(candidate, nil)
 			continue
 		}
+		// zabelezi da si poslao i cekas odgovor
+		h.activeNeightbor[candidate.Node.ID] = int(time.Now().Unix())
 		h.logger.Printf("%s sent NEIGHBOR message to %s", h.self.ID, candidate.Node.ID)
 		break
 	}

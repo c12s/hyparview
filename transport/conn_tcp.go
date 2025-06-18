@@ -10,11 +10,12 @@ import (
 )
 
 type TCPConn struct {
-	address      string
-	conn         *net.TCPConn
-	msgCh        chan []byte
-	disconnectCh chan struct{}
-	logger       *log.Logger
+	address           string
+	conn              *net.TCPConn
+	msgCh             chan []byte
+	disconnectCh      chan struct{}
+	disconnectHandler func()
+	logger            *log.Logger
 }
 
 func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
@@ -26,7 +27,7 @@ func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
 }
 
 func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
-	tcpConn := TCPConn{
+	tcpConn := &TCPConn{
 		address:      conn.RemoteAddr().String(),
 		conn:         conn,
 		msgCh:        make(chan []byte),
@@ -35,15 +36,22 @@ func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
 	}
 	tcpConn.conn.SetLinger(0)
 	tcpConn.conn.SetKeepAlive(true)
+	go func() {
+		for range tcpConn.disconnectCh {
+			if tcpConn.disconnectHandler != nil {
+				tcpConn.disconnectHandler()
+			}
+		}
+	}()
 	tcpConn.read()
 	return tcpConn, nil
 }
 
-func (t TCPConn) GetAddress() string {
+func (t *TCPConn) GetAddress() string {
 	return t.address
 }
 
-func (t TCPConn) Send(msg data.Message) error {
+func (t *TCPConn) Send(msg data.Message) error {
 	payload, err := Serialize(msg)
 	if err != nil {
 		return err
@@ -52,25 +60,26 @@ func (t TCPConn) Send(msg data.Message) error {
 	binary.LittleEndian.PutUint32(payloadSize, uint32(len(payload)))
 	msgSerialized := append(payloadSize, payload...)
 	_, err = t.conn.Write(msgSerialized)
+	if err != nil {
+		t.logger.Println(err)
+	}
 	if t.isClosed(err) {
-		t.disconnectCh <- struct{}{}
+		go func() {
+			t.disconnectCh <- struct{}{}
+		}()
 	}
 	return err
 }
 
-func (t TCPConn) disconnect() error {
+func (t *TCPConn) Disconnect() error {
 	return t.conn.Close()
 }
 
-func (t TCPConn) onDisconnect(handler func()) {
-	go func() {
-		for range t.disconnectCh {
-			handler()
-		}
-	}()
+func (t *TCPConn) onDisconnect(handler func()) {
+	t.disconnectHandler = handler
 }
 
-func (t TCPConn) onReceive(handler func(msgBytes []byte)) {
+func (t *TCPConn) onReceive(handler func(msgBytes []byte)) {
 	go func() {
 		for msgBytes := range t.msgCh {
 			handler(msgBytes)
@@ -78,14 +87,16 @@ func (t TCPConn) onReceive(handler func(msgBytes []byte)) {
 	}()
 }
 
-func (t TCPConn) read() {
+func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
-				t.disconnectCh <- struct{}{}
+				go func() {
+					t.disconnectCh <- struct{}{}
+				}()
 				return
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
@@ -93,7 +104,9 @@ func (t TCPConn) read() {
 			_, err = t.conn.Read(payload)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
-				t.disconnectCh <- struct{}{}
+				go func() {
+					t.disconnectCh <- struct{}{}
+				}()
 				return
 			}
 			t.msgCh <- payload
@@ -101,7 +114,7 @@ func (t TCPConn) read() {
 	}()
 }
 
-func (t TCPConn) isClosed(err error) bool {
+func (t *TCPConn) isClosed(err error) bool {
 	if err == nil {
 		return false
 	}
