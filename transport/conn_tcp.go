@@ -5,8 +5,16 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/c12s/hyparview/data"
+)
+
+var (
+	MessagesSent     = 0
+	MessagesRcvd     = 0
+	MessagesSentLock = new(sync.Mutex)
+	MessagesRcvdLock = new(sync.Mutex)
 )
 
 type TCPConn struct {
@@ -68,6 +76,11 @@ func (t *TCPConn) Send(msg data.Message) error {
 			t.disconnectCh <- struct{}{}
 		}()
 	}
+	if err == nil {
+		MessagesSentLock.Lock()
+		MessagesSent++
+		MessagesSentLock.Unlock()
+	}
 	return err
 }
 
@@ -92,6 +105,9 @@ func (t *TCPConn) read() {
 		header := make([]byte, 4)
 		for {
 			_, err := t.conn.Read(header)
+			MessagesRcvdLock.Lock()
+			MessagesRcvd++
+			MessagesRcvdLock.Unlock()
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
 				go func() {
