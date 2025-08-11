@@ -12,7 +12,9 @@ import (
 
 var (
 	MessagesSent     = 0
+	MessagesSentSub  = 0
 	MessagesRcvd     = 0
+	MessagesRcvdSub  = 0
 	MessagesSentLock = new(sync.Mutex)
 	MessagesRcvdLock = new(sync.Mutex)
 )
@@ -69,14 +71,14 @@ func (t *TCPConn) Send(msg data.Message) error {
 	msgSerialized := append(payloadSize, payload...)
 	_, err = t.conn.Write(msgSerialized)
 	if err != nil {
-		t.logger.Println(err)
+		// t.logger.Println(err)
 	}
 	if t.isClosed(err) {
 		go func() {
 			t.disconnectCh <- struct{}{}
 		}()
 	}
-	if err == nil {
+	if err == nil && msg.Type == data.CUSTOM {
 		MessagesSentLock.Lock()
 		MessagesSent++
 		MessagesSentLock.Unlock()
@@ -105,11 +107,8 @@ func (t *TCPConn) read() {
 		header := make([]byte, 4)
 		for {
 			_, err := t.conn.Read(header)
-			MessagesRcvdLock.Lock()
-			MessagesRcvd++
-			MessagesRcvdLock.Unlock()
 			if err != nil {
-				t.logger.Println("tcp read error:", err)
+				// t.logger.Println("tcp read error:", err)
 				go func() {
 					t.disconnectCh <- struct{}{}
 				}()
@@ -119,11 +118,16 @@ func (t *TCPConn) read() {
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
-				t.logger.Println("tcp read error:", err)
+				// t.logger.Println("tcp read error:", err)
 				go func() {
 					t.disconnectCh <- struct{}{}
 				}()
 				return
+			}
+			if payload[0] == byte(data.CUSTOM) {
+				MessagesRcvdLock.Lock()
+				MessagesRcvd++
+				MessagesRcvdLock.Unlock()
 			}
 			t.msgCh <- payload
 		}
@@ -146,21 +150,21 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 		if err != nil {
 			return err
 		}
-		logger.Printf("Server listening on %s\n", address)
+		// logger.Printf("Server listening on %s\n", address)
 		var conns []net.Conn
 
 		go func(listener net.Listener) {
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					logger.Println("Connection error:", err)
+					// logger.Println("Connection error:", err)
 					return
 				}
-				logger.Println("new TCP connection", conn.RemoteAddr().String())
+				// logger.Println("new TCP connection", conn.RemoteAddr().String())
 				conns = append(conns, conn)
 				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), logger)
 				if err != nil {
-					logger.Println(err)
+					// logger.Println(err)
 					continue
 				}
 				go handler(tcpConn)
@@ -168,10 +172,10 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 		}(listener)
 		go func(stopCh chan struct{}, listener net.Listener) {
 			<-stopCh
-			logger.Println("received signal to stop accepting TCP connections")
+			// logger.Println("received signal to stop accepting TCP connections")
 			err := listener.Close()
 			if err != nil {
-				logger.Println(err)
+				// logger.Println(err)
 			}
 			for _, conn := range conns {
 				conn.Close()
