@@ -8,13 +8,15 @@ func (s Subscription) Unsubscribe() {
 	s.unsub <- struct{}{}
 }
 
-func Subscribe[T any](ch chan T, handler func(peer T)) Subscription {
+func Subscribe[T any](ch chan T, handler func(T)) Subscription {
 	unsub := make(chan struct{})
 	go func() {
 		for {
 			select {
-			case peer := <-ch:
-				handler(peer)
+			case x := <-ch:
+				if handler != nil {
+					handler(x)
+				}
 			case <-unsub:
 				return
 			}

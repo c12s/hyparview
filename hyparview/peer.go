@@ -48,21 +48,21 @@ func (p *PeerList) getByConn(conn transport.Conn) (Peer, error) {
 	return p.peers[index], nil
 }
 
-func (p *PeerList) selectRandom(nodeIdBlacklist []string, connected bool) (Peer, error) {
+func (p *PeerList) selectRandom(nodeIdBlacklist []string) (Peer, error) {
 	filteredPeers := make([]Peer, 0)
 	for _, peer := range p.peers {
-		if (!connected || peer.Conn != nil) && !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.Node.ID }) {
+		if !slices.ContainsFunc(nodeIdBlacklist, func(id string) bool { return id == peer.Node.ID }) {
 			filteredPeers = append(filteredPeers, peer)
 		}
 	}
 	if len(filteredPeers) == 0 {
-		return Peer{}, errors.New("tmp")
+		return Peer{}, errors.New("no peers")
 	}
 	index := rand.Intn(len(filteredPeers))
 	return filteredPeers[index], nil
 }
 
-func (p *PeerList) delete(peer Peer, notify chan Peer) {
+func (p *PeerList) delete(peer Peer) {
 	index := slices.IndexFunc(p.peers, func(p Peer) bool {
 		return p.Node.ID == peer.Node.ID
 	})
@@ -70,22 +70,13 @@ func (p *PeerList) delete(peer Peer, notify chan Peer) {
 		return
 	}
 	p.peers = slices.Delete(p.peers, index, index+1)
-	if notify != nil {
-		notify <- peer
-	}
 }
 
-func (p *PeerList) add(peer Peer, connected bool, notify chan Peer) {
-	if connected && peer.Conn == nil {
-		return
-	}
+func (p *PeerList) add(peer Peer) {
 	if slices.ContainsFunc(p.peers, func(p Peer) bool {
 		return p.Node.ID == peer.Node.ID
 	}) {
 		return
 	}
 	p.peers = append(p.peers, peer)
-	if notify != nil {
-		notify <- peer
-	}
 }

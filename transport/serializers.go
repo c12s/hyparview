@@ -3,7 +3,6 @@ package transport
 import (
 	"encoding/json"
 	"errors"
-	"slices"
 
 	"github.com/c12s/hyparview/data"
 )
@@ -29,11 +28,12 @@ func GetMsgType(msgBytes []byte) data.MessageType {
 	if len(msgBytes) == 0 {
 		return data.UNKNOWN
 	}
-	msgType := data.MessageType(int8(msgBytes[0]))
-	if !slices.Contains(data.KnownMsgTypes(), msgType) {
-		return data.UNKNOWN
-	}
-	return msgType
+	return data.MessageType(int8(msgBytes[0]))
+	// msgType := data.MessageType(int8(msgBytes[0]))
+	// if !slices.Contains(data.KnownMsgTypes(), msgType) {
+	// 	return data.UNKNOWN
+	// }
+	// return msgType
 }
 
 func GetPayload(msgBytes []byte) ([]byte, error) {

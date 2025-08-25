@@ -78,11 +78,11 @@ func (t *TCPConn) Send(msg data.Message) error {
 			t.disconnectCh <- struct{}{}
 		}()
 	}
-	if err == nil && msg.Type == data.CUSTOM {
-		MessagesSentLock.Lock()
-		MessagesSent++
-		MessagesSentLock.Unlock()
-	}
+	// if err == nil && msg.Type == data.CUSTOM {
+	MessagesSentLock.Lock()
+	MessagesSent++
+	MessagesSentLock.Unlock()
+	// }
 	return err
 }
 
@@ -124,11 +124,11 @@ func (t *TCPConn) read() {
 				}()
 				return
 			}
-			if payload[0] == byte(data.CUSTOM) {
-				MessagesRcvdLock.Lock()
-				MessagesRcvd++
-				MessagesRcvdLock.Unlock()
-			}
+			// if payload[0] == byte(data.CUSTOM) {
+			MessagesRcvdLock.Lock()
+			MessagesRcvd++
+			MessagesRcvdLock.Unlock()
+			// }
 			t.msgCh <- payload
 		}
 	}()
