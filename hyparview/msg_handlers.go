@@ -19,6 +19,7 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 	h.logger.Println("received Join message", "self", h.self.ID, "from", msg.NodeID, "listenAddress", msg.ListenAddress)
 
 	if peer, err := h.activeView.getById(msg.NodeID); err == nil {
+		h.logger.Println(sender.Disconnect())
 		return fmt.Errorf("peer %s already in active view", peer.Node.ID)
 	}
 

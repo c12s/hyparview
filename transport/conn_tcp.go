@@ -44,7 +44,7 @@ func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
 		disconnectCh: make(chan struct{}),
 		logger:       logger,
 	}
-	tcpConn.conn.SetLinger(0)
+	// tcpConn.conn.SetLinger(0)
 	tcpConn.conn.SetKeepAlive(true)
 	go func() {
 		for range tcpConn.disconnectCh {
@@ -71,7 +71,7 @@ func (t *TCPConn) Send(msg data.Message) error {
 	msgSerialized := append(payloadSize, payload...)
 	_, err = t.conn.Write(msgSerialized)
 	if err != nil {
-		// t.logger.Println(err)
+		t.logger.Println(err)
 	}
 	if t.isClosed(err) {
 		go func() {
@@ -108,7 +108,7 @@ func (t *TCPConn) read() {
 		for {
 			_, err := t.conn.Read(header)
 			if err != nil {
-				// t.logger.Println("tcp read error:", err)
+				t.logger.Println("tcp read error:", err)
 				go func() {
 					t.disconnectCh <- struct{}{}
 				}()
@@ -118,7 +118,7 @@ func (t *TCPConn) read() {
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
-				// t.logger.Println("tcp read error:", err)
+				t.logger.Println("tcp read error:", err)
 				go func() {
 					t.disconnectCh <- struct{}{}
 				}()
@@ -157,14 +157,14 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 			for {
 				conn, err := listener.Accept()
 				if err != nil {
-					// logger.Println("Connection error:", err)
+					logger.Println("Connection error:", err)
 					return
 				}
 				// logger.Println("new TCP connection", conn.RemoteAddr().String())
 				conns = append(conns, conn)
 				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), logger)
 				if err != nil {
-					// logger.Println(err)
+					logger.Println(err)
 					continue
 				}
 				go handler(tcpConn)

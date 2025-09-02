@@ -82,7 +82,7 @@ func (h *HyParView) join(contactNodeID string, contactNodeAddress string) error 
 		if err != nil {
 			return err
 		}
-		_ = h.connManager.OnReceive(h.triggerMsgRcvd)
+		h.rcvSub = h.connManager.OnReceive(h.triggerMsgRcvd)
 		_ = h.connManager.OnConnDown(h.triggerConnDown)
 		// go h.shuffle()
 		go h.triggerShuffle()
@@ -133,7 +133,8 @@ func (h *HyParView) leave() {
 	h.logger.Printf("%s is leaving the network", h.self.ID)
 	h.left = true
 	h.connManager.StopAcceptingConns()
-	_ = h.connManager.OnReceive(nil)
+	h.rcvSub.Unsubscribe()
+	// _ = h.connManager.OnReceive(nil)
 	h.stopShuffleCh <- ShuffleEvent{}
 	for _, peer := range h.activeView.peers {
 		err := h.connManager.Disconnect(peer.Conn)
@@ -141,6 +142,9 @@ func (h *HyParView) leave() {
 			h.logger.Println(err)
 		}
 	}
+	h.activeView.peers = make([]Peer, 0)
+	h.passiveView.peers = make([]Peer, 0)
+	h.activeNeightbor = make(map[string]int)
 }
 
 func (h *HyParView) processMsg(msgBytes []byte, sender transport.Conn) {

@@ -29,6 +29,7 @@ type HyParView struct {
 	stopShuffleCh     chan ShuffleEvent
 	peerUpCh          chan PeerUpEvent
 	peerDownCh        chan PeerDownEvent
+	rcvSub            transport.Subscription
 }
 
 func NewHyParView(config Config, self data.Node, connManager transport.ConnManager, logger *log.Logger) (*HyParView, error) {
