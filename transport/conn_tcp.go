@@ -41,7 +41,7 @@ func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
 		address:      conn.RemoteAddr().String(),
 		conn:         conn,
 		msgCh:        make(chan []byte),
-		disconnectCh: make(chan struct{}),
+		disconnectCh: make(chan struct{}, 1),
 		logger:       logger,
 	}
 	// tcpConn.conn.SetLinger(0)
@@ -74,9 +74,9 @@ func (t *TCPConn) Send(msg data.Message) error {
 		t.logger.Println(err)
 	}
 	if t.isClosed(err) {
-		go func() {
-			t.disconnectCh <- struct{}{}
-		}()
+		// go func() {
+		t.disconnectCh <- struct{}{}
+		// }()
 	}
 	// if err == nil && msg.Type == data.CUSTOM {
 	MessagesSentLock.Lock()
@@ -109,9 +109,9 @@ func (t *TCPConn) read() {
 			_, err := t.conn.Read(header)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
-				go func() {
-					t.disconnectCh <- struct{}{}
-				}()
+				// go func() {
+				t.disconnectCh <- struct{}{}
+				// }()
 				return
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
@@ -119,9 +119,9 @@ func (t *TCPConn) read() {
 			_, err = t.conn.Read(payload)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
-				go func() {
-					t.disconnectCh <- struct{}{}
-				}()
+				// go func() {
+				t.disconnectCh <- struct{}{}
+				// }()
 				return
 			}
 			// if payload[0] == byte(data.CUSTOM) {
