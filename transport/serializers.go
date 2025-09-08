@@ -1,11 +1,14 @@
 package transport
 
 import (
-	"encoding/json"
 	"errors"
 
 	"github.com/c12s/hyparview/data"
+
+	jsoniter "github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func Serialize(msg data.Message) ([]byte, error) {
 	typeByte := byte(msg.Type)
