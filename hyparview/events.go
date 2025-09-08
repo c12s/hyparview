@@ -213,19 +213,16 @@ func (h *HyParView) shuffle() {
 	if err != nil {
 		h.logger.Println(err)
 	}
-	if len(h.activeView.peers) < h.activeView.capacity {
-		h.replacePeer([]string{}, 2)
-	}
 }
 
 func (h *HyParView) processConnDown(conn transport.Conn) {
 	if peer, err := h.activeView.getByConn(conn); err == nil {
 		// h.logger.Printf("%s - peer %s down", h.self.ID, peer.Node.ID)
 		h.activeView.delete(peer)
-		h.triggerPeerDown(peer)
 		if !h.activeView.full() && !h.left {
 			h.replacePeer([]string{}, 2)
 		}
+		h.triggerPeerDown(peer)
 	}
 }
 
