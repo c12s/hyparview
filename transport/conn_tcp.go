@@ -115,6 +115,7 @@ func (t *TCPConn) read() {
 				return
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
+			t.logger.Println("PAYLOAD SIZE", payloadSize)
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
