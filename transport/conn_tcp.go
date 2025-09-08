@@ -66,8 +66,10 @@ func (t *TCPConn) Send(msg data.Message) error {
 	if err != nil {
 		return err
 	}
+	size := uint32(len(payload))
+	t.logger.Println("SENT PAYLOAD SIZE", size)
 	payloadSize := make([]byte, 4)
-	binary.LittleEndian.PutUint32(payloadSize, uint32(len(payload)))
+	binary.LittleEndian.PutUint32(payloadSize, size)
 	msgSerialized := append(payloadSize, payload...)
 	_, err = t.conn.Write(msgSerialized)
 	if err != nil {
@@ -116,6 +118,11 @@ func (t *TCPConn) read() {
 			}
 			payloadSize := binary.LittleEndian.Uint32(header)
 			t.logger.Println("PAYLOAD SIZE", payloadSize)
+			if payloadSize > 50000 {
+				t.logger.Println("payload too large")
+				t.disconnectCh <- struct{}{}
+				return
+			}
 			payload := make([]byte, payloadSize)
 			_, err = t.conn.Read(payload)
 			if err != nil {
