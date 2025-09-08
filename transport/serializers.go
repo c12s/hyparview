@@ -32,7 +32,7 @@ func Serialize(msg data.Message) ([]byte, error) {
 
 		stream := jsoniter.NewStream(jsoniter.ConfigFastest, buf, 512)
 		stream.WriteVal(payload)
-
+		stream.Flush()
 		payloadBytes = buf.Bytes()
 	}
 
