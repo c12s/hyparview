@@ -2,14 +2,14 @@ package transport
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"sync"
 
 	"github.com/c12s/hyparview/data"
-	jsoniter "github.com/json-iterator/go"
 )
 
-var json = jsoniter.ConfigFastest
+// var json = jsoniter.ConfigFastest
 
 var bufferPool = sync.Pool{
 	New: func() any {
@@ -30,9 +30,8 @@ func Serialize(msg data.Message) ([]byte, error) {
 		buf.Reset() // clear previous content
 		defer bufferPool.Put(buf)
 
-		stream := jsoniter.NewStream(jsoniter.ConfigFastest, buf, 512)
-		stream.WriteVal(payload)
-		stream.Flush()
+		enc := json.NewEncoder(buf)
+		enc.Encode(payload)
 		payloadBytes = buf.Bytes()
 	}
 
