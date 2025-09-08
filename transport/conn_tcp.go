@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/binary"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -108,7 +109,8 @@ func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
-			_, err := t.conn.Read(header)
+			// _, err := t.conn.Read(header)
+			_, err := io.ReadFull(t.conn, header)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
 				// go func() {
@@ -124,7 +126,8 @@ func (t *TCPConn) read() {
 				return
 			}
 			payload := make([]byte, payloadSize)
-			_, err = t.conn.Read(payload)
+			// _, err = t.conn.Read(payload)
+			_, err = io.ReadFull(t.conn, payload)
 			if err != nil {
 				t.logger.Println("tcp read error:", err)
 				// go func() {
