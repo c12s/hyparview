@@ -209,6 +209,9 @@ func (h *HyParView) shuffle() {
 		h.logger.Println("no peers in active view to perform shuffle")
 		return
 	}
+	if len(h.activeView.peers) < h.activeView.capacity {
+		h.replacePeer([]string{}, 2)
+	}
 	err = peer.Conn.Send(shuffleMsg)
 	if err != nil {
 		h.logger.Println(err)
