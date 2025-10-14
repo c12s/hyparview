@@ -171,7 +171,9 @@ func (h *HyParView) processMsg(msgBytes []byte, sender transport.Conn) {
 		peer, err := h.activeView.getByConn(sender)
 		if err != nil {
 			h.logger.Println(err)
-			return
+			if !h.AllowAny {
+				return
+			}
 		}
 		handler := h.clientMsgHandlers[msgType]
 		if handler == nil {

@@ -30,6 +30,7 @@ type HyParView struct {
 	peerUpCh          chan PeerUpEvent
 	peerDownCh        chan PeerDownEvent
 	rcvSub            transport.Subscription
+	AllowAny          bool
 }
 
 func NewHyParView(config Config, self data.Node, connManager transport.ConnManager, logger *log.Logger) (*HyParView, error) {
