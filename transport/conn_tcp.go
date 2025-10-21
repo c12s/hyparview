@@ -126,9 +126,9 @@ func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
-			if t.readTimeout {
-				t.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			}
+			// if t.readTimeout {
+			// 	t.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			// }
 			// _, err := t.conn.Read(header)
 			_, err := io.ReadFull(t.conn, header)
 			if err != nil {
