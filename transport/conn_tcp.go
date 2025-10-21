@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/c12s/hyparview/data"
 )
@@ -109,6 +110,7 @@ func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
+			t.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			// _, err := t.conn.Read(header)
 			_, err := io.ReadFull(t.conn, header)
 			if err != nil {
