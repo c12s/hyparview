@@ -3,20 +3,22 @@ package transport
 import "log"
 
 type ConnManager struct {
-	newConnFn          func(address string, logger *log.Logger) (Conn, error)
+	newConnFn          func(address string, readTimout bool, logger *log.Logger) (Conn, error)
 	acceptConnsFn      func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error
 	stopAcceptingConns chan struct{}
 	connDown           chan Conn
 	messages           chan MsgReceived
+	readTimeout        bool
 }
 
-func NewConnManager(newConnFn func(address string, logger *log.Logger) (Conn, error), acceptConnsFn func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error) ConnManager {
+func NewConnManager(readTimeout bool, newConnFn func(address string, readTimeout bool, logger *log.Logger) (Conn, error), acceptConnsFn func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error) ConnManager {
 	return ConnManager{
 		newConnFn:          newConnFn,
 		acceptConnsFn:      acceptConnsFn,
 		stopAcceptingConns: make(chan struct{}),
 		connDown:           make(chan Conn),
 		messages:           make(chan MsgReceived),
+		readTimeout: readTimeout,
 	}
 }
 
@@ -31,7 +33,7 @@ func (cm *ConnManager) StopAcceptingConns() {
 }
 
 func (cm *ConnManager) Connect(address string, logger *log.Logger) (Conn, error) {
-	conn, err := cm.newConnFn(address, logger)
+	conn, err := cm.newConnFn(address, cm.readTimeout, logger)
 	if err != nil {
 		return nil, err
 	}

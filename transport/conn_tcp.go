@@ -28,12 +28,16 @@ type TCPConn struct {
 	msgCh             chan []byte
 	disconnectCh      chan struct{}
 	disconnectHandler func()
+	readTimeout       bool
 	logger            *log.Logger
 }
 
-func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
+func NewTCPConn(address string, readTimeout bool, logger *log.Logger) (Conn, error) {
 	// todo: tmp
 	localIP := strings.Split(os.Getenv("RN_LISTEN_ADDR"), ":")[0]
+	if localIP == "" {
+		localIP = strings.Split(os.Getenv("LISTEN_ADDR"), ":")[0]
+	}
 	localAddr := &net.TCPAddr{IP: net.ParseIP(localIP), Port: 0}
 	dialer := net.Dialer{
 		LocalAddr: localAddr,
@@ -43,16 +47,17 @@ func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return MakeTCPConn(conn.(*net.TCPConn), logger)
+	return MakeTCPConn(conn.(*net.TCPConn), readTimeout, logger)
 }
 
-func MakeTCPConn(conn *net.TCPConn, logger *log.Logger) (Conn, error) {
+func MakeTCPConn(conn *net.TCPConn, readTimeout bool, logger *log.Logger) (Conn, error) {
 	tcpConn := &TCPConn{
 		address:      conn.RemoteAddr().String(),
 		conn:         conn,
 		msgCh:        make(chan []byte),
 		disconnectCh: make(chan struct{}, 1),
 		logger:       logger,
+		readTimeout:  readTimeout,
 	}
 	// tcpConn.conn.SetLinger(0)
 	tcpConn.conn.SetKeepAlive(true)
@@ -82,7 +87,7 @@ func (t *TCPConn) Send(msg data.Message) {
 		payloadSize := make([]byte, 4)
 		binary.LittleEndian.PutUint32(payloadSize, size)
 		msgSerialized := append(payloadSize, payload...)
-		t.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		// t.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		_, err = t.conn.Write(msgSerialized)
 		if err != nil {
 			t.logger.Println(err)
@@ -121,7 +126,9 @@ func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
-			// t.conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+			if t.readTimeout {
+				t.conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+			}
 			// _, err := t.conn.Read(header)
 			_, err := io.ReadFull(t.conn, header)
 			if err != nil {
@@ -168,7 +175,7 @@ func (t *TCPConn) isClosed(err error) bool {
 		strings.Contains(err.Error(), "EOF")
 }
 
-func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error {
+func AcceptTcpConnsFn(address string, readTimeout bool) func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error {
 	return func(stopCh chan struct{}, handler func(conn Conn), logger *log.Logger) error {
 		listener, err := net.Listen("tcp", address)
 		if err != nil {
@@ -186,7 +193,7 @@ func AcceptTcpConnsFn(address string) func(stopCh chan struct{}, handler func(co
 				}
 				// logger.Println("new TCP connection", conn.RemoteAddr().String())
 				conns = append(conns, conn)
-				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), logger)
+				tcpConn, err := MakeTCPConn(conn.(*net.TCPConn), readTimeout, logger)
 				if err != nil {
 					logger.Println(err)
 					continue
