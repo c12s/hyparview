@@ -32,7 +32,14 @@ type TCPConn struct {
 }
 
 func NewTCPConn(address string, logger *log.Logger) (Conn, error) {
-	conn, err := net.Dial("tcp", address)
+	// todo: tmp
+	localIP := strings.Split(os.Getenv("RN_LISTEN_ADDR"), ":")[0]
+	localAddr := &net.TCPAddr{IP: net.ParseIP(localIP), Port: 0}
+	dialer := net.Dialer{
+		LocalAddr: localAddr,
+		Timeout:   5 * time.Second,
+	}
+	conn, err := dialer.Dial("tcp", address)
 	if err != nil {
 		return nil, err
 	}
