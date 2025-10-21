@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -73,11 +74,12 @@ func (t *TCPConn) Send(msg data.Message) error {
 	payloadSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(payloadSize, size)
 	msgSerialized := append(payloadSize, payload...)
+	t.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	_, err = t.conn.Write(msgSerialized)
 	if err != nil {
 		t.logger.Println(err)
 	}
-	if t.isClosed(err) {
+	if t.isClosed(err) || os.IsTimeout(err) {
 		// go func() {
 		t.disconnectCh <- struct{}{}
 		// }()
@@ -110,7 +112,7 @@ func (t *TCPConn) read() {
 	go func() {
 		header := make([]byte, 4)
 		for {
-			t.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+			// t.conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 			// _, err := t.conn.Read(header)
 			_, err := io.ReadFull(t.conn, header)
 			if err != nil {
