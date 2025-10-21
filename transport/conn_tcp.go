@@ -91,12 +91,13 @@ func (t *TCPConn) Send(msg data.Message) {
 		_, err = t.conn.Write(msgSerialized)
 		if err != nil {
 			t.logger.Println(err)
-		}
-		if t.isClosed(err) || os.IsTimeout(err) {
-			// go func() {
 			t.disconnectCh <- struct{}{}
-			// }()
 		}
+		// if t.isClosed(err) || os.IsTimeout(err) {
+		// 	// go func() {
+		// 	t.disconnectCh <- struct{}{}
+		// 	// }()
+		// }
 		// if err == nil && msg.Type == data.CUSTOM {
 		MessagesSentLock.Lock()
 		MessagesSent++
