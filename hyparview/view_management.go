@@ -55,12 +55,13 @@ func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 				AttemptsLeft:  attempts,
 			},
 		}
-		err = conn.Send(neighborMsg)
-		if err != nil {
-			h.logger.Println(err)
-			h.passiveView.delete(candidate)
-			continue
-		}
+		conn.Send(neighborMsg)
+		// err = conn.Send(neighborMsg)
+		// if err != nil {
+		// 	h.logger.Println(err)
+		// 	h.passiveView.delete(candidate)
+		// 	continue
+		// }
 		// zabelezi da si poslao i cekas odgovor
 		h.activeNeightbor[candidate.Node.ID] = int(time.Now().Unix())
 		h.logger.Printf("%s sent NEIGHBOR message to %s", h.self.ID, candidate.Node.ID)

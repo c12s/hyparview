@@ -53,9 +53,10 @@ func (h *HyParView) onJoin(msgBytes []byte, sender transport.Conn) error {
 		if peer.Node.ID == newPeer.Node.ID {
 			continue
 		}
-		if err := peer.Conn.Send(forwardJoinMsg); err != nil {
-			h.logger.Println("failed to send ForwardJoin message", "to", peer.Node.ID, "error", err)
-		}
+		peer.Conn.Send(forwardJoinMsg)
+		// if err := peer.Conn.Send(forwardJoinMsg); err != nil {
+		// 	h.logger.Println("failed to send ForwardJoin message", "to", peer.Node.ID, "error", err)
+		// }
 	}
 	return nil
 }
@@ -114,21 +115,22 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 					ListenAddress: h.self.ListenAddress,
 				},
 			}
-			if err := conn.Send(forwardJoinAcceptMsg); err != nil {
-				h.logger.Println("failed to send ForwardJoinAccept", "to", msg.NodeID, "error", err)
-			} else {
-				if h.activeView.full() {
-					if err := h.disconnectRandomPeer(); err != nil {
-						h.logger.Println("failed to disconnect random peer", "error", err)
-					}
+			conn.Send(forwardJoinAcceptMsg)
+			// if err := conn.Send(forwardJoinAcceptMsg); err != nil {
+			// 	h.logger.Println("failed to send ForwardJoinAccept", "to", msg.NodeID, "error", err)
+			// } else {
+			if h.activeView.full() {
+				if err := h.disconnectRandomPeer(); err != nil {
+					h.logger.Println("failed to disconnect random peer", "error", err)
 				}
-				newPeer.Conn = conn
-				h.activeView.add(newPeer)
-				h.triggerPeerUp(newPeer)
-				h.passiveView.delete(newPeer)
-				addedToActiveView = true
-				h.logger.Println("added peer to active view via forward join", "peerID", newPeer.Node.ID, "address", newPeer.Node.ListenAddress)
 			}
+			newPeer.Conn = conn
+			h.activeView.add(newPeer)
+			h.triggerPeerUp(newPeer)
+			h.passiveView.delete(newPeer)
+			addedToActiveView = true
+			h.logger.Println("added peer to active view via forward join", "peerID", newPeer.Node.ID, "address", newPeer.Node.ListenAddress)
+			// }
 		}
 	} else if msg.TTL == h.config.PRWL {
 		h.passiveView.add(newPeer)
@@ -144,7 +146,7 @@ func (h *HyParView) onForwardJoin(msgBytes []byte, sender transport.Conn) error 
 		}
 		randomPeer, err := h.activeView.selectRandom(nodeIdBlacklist)
 		if err == nil && randomPeer.Conn != nil {
-			return randomPeer.Conn.Send(data.Message{
+			randomPeer.Conn.Send(data.Message{
 				Type:    data.FORWARD_JOIN,
 				Payload: msg,
 			})
@@ -235,7 +237,9 @@ func (h *HyParView) onNeighbor(msgBytes []byte, sender transport.Conn) error {
 			AttemptsLeft:  msg.AttemptsLeft - 1,
 		},
 	}
-	return sender.Send(neighborReplyMsg)
+	// return sender.Send(neighborReplyMsg)
+	sender.Send(neighborReplyMsg)
+	return nil
 }
 
 func (h *HyParView) onNeighborReply(msgBytes []byte, sender transport.Conn) error {
@@ -322,11 +326,16 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 		if err != nil {
 			return fmt.Errorf("cannot find a peer to forward the shuffle msg")
 		}
-		err = peer.Conn.Send(data.Message{
+		// err = peer.Conn.Send(data.Message{
+		// 	Type:    data.SHUFFLE,
+		// 	Payload: msg,
+		// })
+		// return err
+		peer.Conn.Send(data.Message{
 			Type:    data.SHUFFLE,
 			Payload: msg,
 		})
-		return err
+		return nil
 	} else {
 		maxIndex := int(math.Min(float64(len(msg.Nodes)), float64(len(h.passiveView.peers))))
 		peers := h.passiveView.peers[:maxIndex]
@@ -356,9 +365,10 @@ func (h *HyParView) onShuffle(msgBytes []byte, sender transport.Conn) error {
 				Nodes:         nodes,
 			},
 		}
-		if err := conn.Send(shuffleReplyMsg); err != nil {
-			h.logger.Println("failed to send ShuffleReply", "to", msg.ListenAddress, "error", err)
-		}
+		conn.Send(shuffleReplyMsg)
+		// if err := conn.Send(shuffleReplyMsg); err != nil {
+		// 	h.logger.Println("failed to send ShuffleReply", "to", msg.ListenAddress, "error", err)
+		// }
 		if tmp {
 			if err := h.connManager.Disconnect(conn); err != nil {
 				h.logger.Println("failed to disconnect after sending ShuffleReply", "error", err)

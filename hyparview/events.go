@@ -106,11 +106,12 @@ func (h *HyParView) join(contactNodeID string, contactNodeAddress string) error 
 		},
 	}
 
-	err = conn.Send(msg)
-	if err != nil {
-		h.logger.Printf("%s failed to send JOIN message to %s: %v", h.self.ID, contactNodeID, err)
-		return err
-	}
+	conn.Send(msg)
+	// err = conn.Send(msg)
+	// if err != nil {
+	// 	h.logger.Printf("%s failed to send JOIN message to %s: %v", h.self.ID, contactNodeID, err)
+	// 	return err
+	// }
 
 	newPeer := Peer{
 		Node: data.Node{
@@ -211,10 +212,11 @@ func (h *HyParView) shuffle() {
 		h.logger.Println("no peers in active view to perform shuffle")
 		return
 	}
-	err = peer.Conn.Send(shuffleMsg)
-	if err != nil {
-		h.logger.Println(err)
-	}
+	peer.Conn.Send(shuffleMsg)
+	// err = peer.Conn.Send(shuffleMsg)
+	// if err != nil {
+	// 	h.logger.Println(err)
+	// }
 }
 
 func (h *HyParView) processConnDown(conn transport.Conn) {

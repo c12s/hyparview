@@ -64,32 +64,34 @@ func (t *TCPConn) GetAddress() string {
 	return t.address
 }
 
-func (t *TCPConn) Send(msg data.Message) error {
-	payload, err := Serialize(msg)
-	if err != nil {
-		return err
-	}
-	size := uint32(len(payload))
-	t.logger.Println("SENT PAYLOAD SIZE", size)
-	payloadSize := make([]byte, 4)
-	binary.LittleEndian.PutUint32(payloadSize, size)
-	msgSerialized := append(payloadSize, payload...)
-	t.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-	_, err = t.conn.Write(msgSerialized)
-	if err != nil {
-		t.logger.Println(err)
-	}
-	if t.isClosed(err) || os.IsTimeout(err) {
-		// go func() {
-		t.disconnectCh <- struct{}{}
-		// }()
-	}
-	// if err == nil && msg.Type == data.CUSTOM {
-	MessagesSentLock.Lock()
-	MessagesSent++
-	MessagesSentLock.Unlock()
-	// }
-	return err
+func (t *TCPConn) Send(msg data.Message) {
+	go func() {
+		payload, err := Serialize(msg)
+		if err != nil {
+			// return err
+		}
+		size := uint32(len(payload))
+		t.logger.Println("SENT PAYLOAD SIZE", size)
+		payloadSize := make([]byte, 4)
+		binary.LittleEndian.PutUint32(payloadSize, size)
+		msgSerialized := append(payloadSize, payload...)
+		t.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		_, err = t.conn.Write(msgSerialized)
+		if err != nil {
+			t.logger.Println(err)
+		}
+		if t.isClosed(err) || os.IsTimeout(err) {
+			// go func() {
+			t.disconnectCh <- struct{}{}
+			// }()
+		}
+		// if err == nil && msg.Type == data.CUSTOM {
+		MessagesSentLock.Lock()
+		MessagesSent++
+		MessagesSentLock.Unlock()
+		// }
+		// return err
+	}()
 }
 
 func (t *TCPConn) Disconnect() error {
