@@ -80,6 +80,8 @@ func (t *TCPConn) Send(msg data.Message) {
 	go func() {
 		payload, err := Serialize(msg)
 		if err != nil {
+			t.logger.Println(err)
+			return
 			// return err
 		}
 		size := uint32(len(payload))
@@ -92,6 +94,10 @@ func (t *TCPConn) Send(msg data.Message) {
 		if err != nil {
 			t.logger.Println(err)
 			t.disconnectCh <- struct{}{}
+		} else {
+			MessagesSentLock.Lock()
+			MessagesSent++
+			MessagesSentLock.Unlock()
 		}
 		// if t.isClosed(err) || os.IsTimeout(err) {
 		// 	// go func() {
@@ -99,9 +105,9 @@ func (t *TCPConn) Send(msg data.Message) {
 		// 	// }()
 		// }
 		// if err == nil && msg.Type == data.CUSTOM {
-		MessagesSentLock.Lock()
-		MessagesSent++
-		MessagesSentLock.Unlock()
+		// MessagesSentLock.Lock()
+		// MessagesSent++
+		// MessagesSentLock.Unlock()
 		// }
 		// return err
 	}()
