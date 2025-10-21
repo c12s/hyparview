@@ -32,6 +32,15 @@ func (h *HyParView) disconnectRandomPeer() error {
 func (h *HyParView) replacePeer(nodeIdBlacklist []string, attempts int) {
 	h.logger.Printf("%s attempting to replace failed peer", h.self.ID)
 	// nemoj slati onima kojima si vec poslao
+	rem := []string{}
+	for id, t := range h.activeNeightbor {
+		if (t + 10) < int(time.Now().Unix()) {
+			rem = append(rem, id)
+		}
+	}
+	for _, k := range rem {
+		delete(h.activeNeightbor, k)
+	}
 	nodeIdBlacklist = append(nodeIdBlacklist, slices.Collect(maps.Keys(h.activeNeightbor))...)
 	for {
 		candidate, err := h.passiveView.selectRandom(nodeIdBlacklist)
